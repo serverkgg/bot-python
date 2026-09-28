@@ -1,0 +1,11 @@
+{
+	"runtime": "python",
+	"platform": "discord",
+	"framework": "discord-py",
+	"env": [
+		{
+			"key": "DISCORD_TOKEN",
+			"sensitive": true
+		}
+	]
+}

@@ -1,0 +1,19 @@
+name: اقتراح / Suggestion
+description: فكرة تحسّن الحزمة — طريقة تشغيل، مدير حزم، قالب جديد / An idea that improves the package — a start method, a package manager, a new template
+labels:
+  - suggestion
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: وش الفكرة؟ / What is the idea?
+      description: اشرح الاقتراح وليش يفيد أصحاب البوتات / Explain the suggestion and why bot owners benefit
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: البدائل / Alternatives
+      description: جربت شيء ثاني يحل نفس الشيء؟ / Anything else that solves the same need?
+    validations:
+      required: false

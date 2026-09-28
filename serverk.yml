@@ -1,0 +1,242 @@
+# yaml-language-server: $schema=./serverk.schema.json
+schemaVersion: serverk.gg/v1
+kind: BotPackage
+
+metadata:
+  id: bot-python
+  name:
+    ar: بوت بايثون
+    en: Python bot
+  description:
+    ar: اربط ريبو GitHub أو ارفع كود بوتك، ونعرف طريقة تشغيله بنفسنا. حط متغيراتك، انشر بضغطة، ونثبّت المكتبات من requirements.txt في بيئة خاصة ببوتك، وتابع كل شيء يطبعه لحظة بلحظة.
+    en: Link a GitHub repository or upload your bot's code, and we work out how to run it. Add your variables, deploy with one press, and we install the dependencies from requirements.txt into an environment of its own while you follow everything it prints, live.
+  tagline:
+    ar: شغّل بوت ديسكورد أو تيليجرام اللي كتبته بلغة بايثون، وخلّه شغّال ليل ونهار
+    en: Run the Discord or Telegram bot you wrote in Python, day and night
+  logo: assets/logo.webp
+  banner: assets/banner.webp
+
+resources:
+  minMemoryMb: 512
+  recommendedMemoryMb: 1024
+  minDiskMb: 2048
+
+container:
+  image: serverkgg/bot-python
+  runtime:
+    platform: linux
+    installBudgetMinutes: 15
+    bootBudgetMinutes: 15
+    shmMb: 64
+    pidsLimit: 256
+  ports: []
+
+environment:
+  vault: true
+
+backup:
+  except:
+    - "**/.venv/**"
+    - "**/__pycache__/**"
+    - .serverk/cache/**
+    - .serverk/history/**
+    - .serverk/snapshots/**
+    - .cache/**
+    - logs/**
+    - "**/*.log"
+
+reset:
+  keep: []
+
+files:
+  protected:
+    - .serverk/**
+  notable:
+    - match: requirements.txt
+      label:
+        ar: المكتبات
+        en: Requirements
+      icon: box
+      color: "#3776ab"
+      restart: true
+      note:
+        ar: المكتبات اللي يحتاجها بوتك. نثبّت اللي تغيّر منها بنفسنا في كل نشر. ثبّت النسخ بـ == عشان ما يتغيّر شيء فجأة.
+        en: The libraries your bot needs. We install whatever changed on every deploy. Pin versions with == so nothing shifts under you.
+    - match: pyproject.toml
+      label:
+        ar: ملف المشروع
+        en: Project file
+      icon: box
+      color: "#3776ab"
+      restart: true
+      note:
+        ar: لو ما عندك requirements.txt نثبّت مشروعك من هنا بـ pip install في كل نشر.
+        en: Without a requirements.txt we install your project from here with pip install on every deploy.
+    - match: .env
+      label:
+        ar: المتغيرات
+        en: Environment
+      icon: settings
+      color: "#e0a458"
+      note:
+        ar: المتغيرات مكانها صفحة المتغيرات في إعدادات بوتك، مو هنا. اللي تحطه هناك يوصل بوتك بنفس الاسم، والحساس منه ينحفظ مشفّر.
+        en: Variables belong in your bot's settings, not here. Whatever you add there reaches your bot under the same name, and sensitive values are stored encrypted.
+    - match: serverk.json
+      label:
+        ar: إعدادات Serverk
+        en: Serverk settings
+      icon: settings
+      color: "#4cc9f0"
+      restart: true
+      note:
+        ar: وقت التشغيل والمنصة وأمر التثبيت وأمر التشغيل لبوتك. لو الملف موجود نمشي عليه بدل اللي نكتشفه من الكود.
+        en: Your bot's runtime, platform, and install and start commands. When the file is there, it wins over what we detect from the code.
+    - match: .venv
+      label:
+        ar: بيئة بايثون
+        en: Python environment
+      icon: puzzle
+      color: "#ffd43b"
+      note:
+        ar: المكتبات المثبّتة لبوتك. ما تحتاج تلمسها، ولو خربت أعد تثبيتها من صفحة بوتك.
+        en: The libraries installed for your bot. You never need to touch them, and if they break, reinstall them from your bot's page.
+
+guideTags:
+  - id: start
+    name:
+      ar: ابدأ من هنا
+      en: Start here
+  - id: deploy
+    name:
+      ar: النشر
+      en: Deploy
+  - id: tokens
+    name:
+      ar: التوكن والمتغيرات
+      en: Tokens and variables
+  - id: troubleshoot
+    name:
+      ar: حل المشاكل
+      en: Troubleshooting
+
+guides:
+  - id: getting-started
+    title:
+      ar: شغّل بوتك أول مرة
+      en: Run your bot for the first time
+    summary:
+      ar: من صفحة وحدة لين أول سطر يطبعه بوتك، خطوة بخطوة.
+      en: From one page to the first line your bot prints, step by step.
+    tags:
+      - start
+    surfaces:
+      - overview
+    bodyPath:
+      ar: guides/getting-started/ar.md
+      en: guides/getting-started/en.md
+  - id: environment-variables
+    title:
+      ar: حط التوكن والمتغيرات
+      en: Add the token and your variables
+    summary:
+      ar: وين يروح التوكن، وكيف يوصل كل متغير لبوتك بنفس الاسم.
+      en: Where the token goes, and how every variable reaches your bot under its own name.
+    tags:
+      - tokens
+      - start
+    surfaces:
+      - overview
+      - console
+    bodyPath:
+      ar: guides/environment-variables/ar.md
+      en: guides/environment-variables/en.md
+  - id: connect-github
+    title:
+      ar: اربط بوتك بريبو GitHub
+      en: Link your bot to a GitHub repository
+    summary:
+      ar: كل push على الفرع ينشر بوتك لحاله، والريبو الخاص يشتغل بدون توكن.
+      en: Every push to the branch deploys your bot, and private repositories work without a token.
+    tags:
+      - deploy
+    surfaces:
+      - overview
+      - panel
+    bodyPath:
+      ar: guides/connect-github/ar.md
+      en: guides/connect-github/en.md
+  - id: deployments
+    title:
+      ar: النشرات والرجوع لنسخة قديمة
+      en: Deployments and rolling back
+    summary:
+      ar: وش يصير في كل نشر، وكيف ترجع بوتك لآخر نسخة كانت شغّالة.
+      en: What happens in each deployment, and how to take your bot back to the last version that worked.
+    tags:
+      - deploy
+    surfaces:
+      - overview
+      - console
+    bodyPath:
+      ar: guides/deployments/ar.md
+      en: guides/deployments/en.md
+  - id: upload-zip
+    title:
+      ar: ارفع كود بوتك بدون ريبو
+      en: Upload your bot's code without a repository
+    summary:
+      ar: ارفع مجلد بوتك أو ملف zip، وانشر نسخة جديدة كل ما عدّلت.
+      en: Upload your bot folder or a zip, and ship a new version whenever you change it.
+    tags:
+      - deploy
+    surfaces:
+      - files
+      - overview
+    bodyPath:
+      ar: guides/upload-zip/ar.md
+      en: guides/upload-zip/en.md
+  - id: discord-token
+    title:
+      ar: وين تلقى توكن بوت ديسكورد
+      en: Where to find your Discord bot token
+    summary:
+      ar: من Developer Portal لين التوكن في متغيرات بوتك، وليش ما تستخدم توكن حسابك الشخصي.
+      en: From the Developer Portal to the token in your bot's variables, and why you never use your personal account token.
+    tags:
+      - tokens
+    surfaces:
+      - overview
+      - panel
+    bodyPath:
+      ar: guides/discord-token/ar.md
+      en: guides/discord-token/en.md
+  - id: telegram-token
+    title:
+      ar: وين تلقى توكن بوت تيليجرام
+      en: Where to find your Telegram bot token
+    summary:
+      ar: سوّ بوتك من BotFather وحط التوكن في متغيراته خلال دقيقة.
+      en: Create your bot with BotFather and put its token in your variables in a minute.
+    tags:
+      - tokens
+    surfaces:
+      - overview
+      - panel
+    bodyPath:
+      ar: guides/telegram-token/ar.md
+      en: guides/telegram-token/en.md
+  - id: read-the-logs
+    title:
+      ar: اقرأ الكونسول وافهم وش صار
+      en: Read the console and work out what happened
+    summary:
+      ar: وش تعني سطور serverk، وكيف تلقى سبب الخطأ لما يفشل النشر أو يتعطّل بوتك.
+      en: What the serverk lines mean, and how to find the cause when a deployment fails or your bot crashes.
+    tags:
+      - troubleshoot
+    surfaces:
+      - console
+      - overview
+    bodyPath:
+      ar: guides/read-the-logs/ar.md
+      en: guides/read-the-logs/en.md

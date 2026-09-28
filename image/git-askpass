@@ -1,0 +1,12 @@
+#!/bin/sh
+host="${SERVERK_GIT_HOST:-}"
+
+if [ -z "$host" ] || [ -z "${SERVERK_GIT_TOKEN:-}" ]; then
+	exit 1
+fi
+
+case "$1" in
+	"Username for 'https://$host': ") printf '%s\n' "x-access-token" ;;
+	"Password for 'https://x-access-token@$host': ") printf '%s\n' "$SERVERK_GIT_TOKEN" ;;
+	*) exit 1 ;;
+esac

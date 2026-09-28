@@ -1,0 +1,11 @@
+{
+	"runtime": "python",
+	"platform": "telegram",
+	"framework": "python-telegram-bot",
+	"env": [
+		{
+			"key": "TELEGRAM_TOKEN",
+			"sensitive": true
+		}
+	]
+}

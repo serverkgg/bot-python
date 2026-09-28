@@ -1,0 +1,10 @@
+.DS_Store
+*.log
+/tmp/
+/dist/
+/.serverk-dev/
+node_modules/
+__pycache__/
+.venv/
+__pycache__/
+*.pyc
