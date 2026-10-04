@@ -1,11 +1,11 @@
 ## One page to a running bot
 
-Everything happens on one page, «Run your bot»:
+Everything happens on one page, "Run your bot":
 
-1. **Code**: pick a GitHub repository, upload your bot folder or a zip, or start from a template.
-2. **What we detected**: we read the code and work out that it is Python, the library (discord.py, python-telegram-bot and others), the platform, and the install and start commands. Change anything before you go on.
+1. **Where is the code?**: pick a GitHub repository, upload your bot folder or a zip, or start from a template.
+2. **What we found in the code**: we read the code and work out that it's Python, the library (discord.py, python-telegram-bot and others), the platform, and the install and start commands. Change anything before you go on.
 3. **Variables**: add the token and every variable your code reads. We suggest the names we found in the code and in `.env.example`.
-4. **Plan**: pick a plan and press **Pay and deploy**.
+4. **Choose a plan**: pick a plan and press **Pay and deploy**.
 
 ## The first deployment
 
@@ -24,12 +24,12 @@ serverk: bot process starting
 
 @[open](overview)
 
-## The token never holds you back
+## A token problem doesn't stop your bot
 
-We start your bot even when its token has a problem, and the error shows up in the console exactly as your bot prints it. Once your bot logs in and prints a line such as `Logged in as MyBot`, its name appears on the bot card together with a link to add it to your server.
+We start your bot even when its token has a problem, and the error shows up in the console exactly as your bot prints it. Once your bot signs in and prints a line such as `Logged in as MyBot`, its name appears on the bot card together with a link to add it to your server.
 
 @[open](console)
 
 ## No bot yet?
 
-We keep templates with a `/ping` or `/start` command that works out of the box: the [Discord template](https://github.com/serverkgg/bot-template-discord-python) and the [Telegram template](https://github.com/serverkgg/bot-template-telegram-python). Pick one on «Run your bot», and we create it as a repository in your own GitHub or copy it straight into your bot.
+We keep templates with a `/ping` or `/start` command that works right away: the [Discord template](https://github.com/serverkgg/bot-template-discord-python) and the [Telegram template](https://github.com/serverkgg/bot-template-telegram-python). Pick one on "Run your bot", and we create it as a repository in your own GitHub or copy it straight into your bot.

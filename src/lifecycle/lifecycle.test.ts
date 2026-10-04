@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { BridgeLifecycleSubject } from "@serverkgg/bridge";
 import {
 	BOT_PLATFORM,
@@ -30,7 +30,7 @@ const environmentOf = async (context: ReturnType<typeof fakeContext>["context"])
 };
 
 describe("the bot process environment", () => {
-	test("hands the bot every vault key exactly as the customer named it", async () => {
+	it("hands the bot every vault key exactly as the customer named it", async () => {
 		const { context } = fakeContext({
 			variables: {
 				MY_VAR: "plain",
@@ -57,7 +57,7 @@ describe("the bot process environment", () => {
 		});
 	});
 
-	test("lets the customer's own settings through and never lets a vault key shadow PATH, HOME or a platform key", async () => {
+	it("lets the customer's own settings through and never lets a vault key shadow PATH, HOME or a platform key", async () => {
 		const { context } = fakeContext({
 			variables: {
 				PIP_INDEX_URL: "https://pypi.example.com/simple",
@@ -97,14 +97,14 @@ describe("the bot process environment", () => {
 		});
 	});
 
-	test("starts with no token at all, because nothing gates the start", async () => {
+	it("starts with no token at all, because nothing gates the start", async () => {
 		const environment = await environmentOf(fakeContext().context);
 
 		expect(environment.BOT_PLATFORM).toBeUndefined();
 		expect(environment.SERVERK_BOT).toBe("1");
 	});
 
-	test("starts the launcher with python in isolated mode, so no PYTHON variable reaches it", async () => {
+	it("starts the launcher with python in isolated mode, so no PYTHON variable reaches it", async () => {
 		expect(await lifecycle.command(fakeContext().context)).toEqual([
 			"python3",
 			"-I",
@@ -112,13 +112,13 @@ describe("the bot process environment", () => {
 		]);
 	});
 
-	test("names the bot, not a game, in the bridge's lifecycle lines", () => {
+	it("names the bot, not a game, in the bridge's lifecycle lines", () => {
 		expect(lifecycle.subject).toBe(BridgeLifecycleSubject.Bot);
 	});
 });
 
 describe("learning the bot's name", () => {
-	test("remembers the name from the bot's own login line once it is ready", async () => {
+	it("remembers the name from the bot's own login line once it is ready", async () => {
 		const { context, stored, print, followers } = fakeContext({
 			secrets: {
 				TELEGRAM_TOKEN,
@@ -138,7 +138,7 @@ describe("learning the bot's name", () => {
 		expect(followers).toHaveLength(0);
 	});
 
-	test("listens for nothing while it cannot tell the platform", async () => {
+	it("listens for nothing while it cannot tell the platform", async () => {
 		const { context, followers } = fakeContext();
 
 		await lifecycle.onReady?.(context);

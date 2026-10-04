@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
 	existsSync,
 	mkdirSync,
@@ -171,7 +171,7 @@ const python = (script: string) => {
 };
 
 describe("the python launcher", () => {
-	test("passes its own unit tests against the templates", () => {
+	it("passes its own unit tests against the templates", () => {
 		const result = Bun.spawnSync(
 			[
 				PYTHON,
@@ -200,7 +200,7 @@ describe("the python launcher", () => {
 		expect(result.exitCode).toBe(0);
 	});
 
-	test("reads the table the bridge renders and falls back to the same table built in", () => {
+	it("reads the table the bridge renders and falls back to the same table built in", () => {
 		expect(readFileSync(TABLE_FILE, "utf8")).toBe(renderDetectTable());
 
 		const answer = python(
@@ -222,7 +222,7 @@ describe("the python launcher", () => {
 		expect(answer.builtIn).toEqual(expected);
 	});
 
-	test("agrees with the driver and the bridge on every line, marker, key and pattern it reads", () => {
+	it("agrees with the driver and the bridge on every line, marker, key and pattern it reads", () => {
 		const answer = python(
 			[
 				"import json, launcher",
@@ -382,7 +382,7 @@ const SERVERK_JSON_SAMPLES = [
 ];
 
 describe("reading serverk.json", () => {
-	test("agrees with the bridge's parser on every sample, broken files included", () => {
+	it("agrees with the bridge's parser on every sample, broken files included", () => {
 		const answer = python(
 			[
 				"import json, launcher",
@@ -425,7 +425,7 @@ describe("the templates as the platform inspects them", () => {
 		});
 	};
 
-	test("detects each template cleanly and agrees with the launcher on how to start it", () => {
+	it("detects each template cleanly and agrees with the launcher on how to start it", () => {
 		const expected = {
 			"discord-python": {
 				platform: BotPlatform.Discord,
@@ -568,7 +568,7 @@ describe("running the launcher", () => {
 		});
 	});
 
-	test("deploys an uploaded snapshot, drops what the next one deleted and rolls back without a download", () => {
+	it("deploys an uploaded snapshot, drops what the next one deleted and rolls back without a download", () => {
 		place(
 			zipOf("one", {
 				"main.py": "one()",
@@ -642,7 +642,7 @@ describe("running the launcher", () => {
 		expect(historyCount()).toBe(2);
 	});
 
-	test("ends a failed deployment with the failure line and records it", () => {
+	it("ends a failed deployment with the failure line and records it", () => {
 		const { code, lines } = launch({
 			SERVERK_SNAPSHOT_ID: "snap_missing",
 			SERVERK_DEPLOYMENT_ID: "dep_9",
@@ -657,7 +657,7 @@ describe("running the launcher", () => {
 		});
 	});
 
-	test("runs the customer's install command inside the venv and reinstalls when it changes", () => {
+	it("runs the customer's install command inside the venv and reinstalls when it changes", () => {
 		const first = launch({
 			SERVERK_INSTALL_COMMAND: "echo custom install",
 		});
@@ -760,7 +760,7 @@ describe("running the launcher", () => {
 		};
 	};
 
-	test("runs a pinned commit from its root directory, never from the checkout root", () => {
+	it("runs a pinned commit from its root directory, never from the checkout root", () => {
 		const work = join(root, "remote-work");
 		const bare = join(root, "sample.git");
 		const git = (cwd: string, ...args: string[]) => {
@@ -819,7 +819,7 @@ describe("running the launcher", () => {
 		expect(readFileSync(join(app, "README.md"), "utf8")).toBe("sibling");
 	});
 
-	test("runs an uploaded snapshot from its root directory and fails the source stage on a missing one", () => {
+	it("runs an uploaded snapshot from its root directory and fails the source stage on a missing one", () => {
 		fakeVenv("app");
 		place(
 			zipOf("rooted", {
@@ -861,7 +861,7 @@ describe("running the launcher", () => {
 		).toBe("serverk: deployment dep_c failed: sync: root directory .. is not valid");
 	});
 
-	test("reinstalls when the root directory changes", () => {
+	it("reinstalls when the root directory changes", () => {
 		for (const folder of [
 			"one",
 			"two",
@@ -912,7 +912,7 @@ describe("running the launcher", () => {
 		return broken;
 	};
 
-	test("runs a start command that sets a variable before the program", () => {
+	it("runs a start command that sets a variable before the program", () => {
 		const { code, lines } = launch({
 			SERVERK_START_COMMAND: "GREETING=hello sh -c 'echo greeting $GREETING'",
 		});
@@ -922,7 +922,7 @@ describe("running the launcher", () => {
 		expect(lines.at(-1)).toBe("greeting hello");
 	});
 
-	test("installs and starts with the commands serverk.json declares", () => {
+	it("installs and starts with the commands serverk.json declares", () => {
 		writeFileSync(
 			join(app, "serverk.json"),
 			JSON.stringify({
@@ -940,7 +940,7 @@ describe("running the launcher", () => {
 		expect(lines.at(-1)).toBe("declared start");
 	});
 
-	test("keeps the customer's PYTHON variables away from the launcher", () => {
+	it("keeps the customer's PYTHON variables away from the launcher", () => {
 		mkdirSync(join(root, "inject"), {
 			recursive: true,
 		});
@@ -973,7 +973,7 @@ describe("running the launcher", () => {
 		expect(lines.at(-1)).toBe("the bot ran");
 	});
 
-	test("boots uploaded code after a restore that dropped the history and the zips, and rebuilds the history later", () => {
+	it("boots uploaded code after a restore that dropped the history and the zips, and rebuilds the history later", () => {
 		place(
 			zipOf("one", {
 				"main.py": "one()",
@@ -1034,7 +1034,7 @@ describe("running the launcher", () => {
 		expect(historyCount()).toBe(1);
 	});
 
-	test("keeps the repository's code when the zip that replaces it is corrupt", () => {
+	it("keeps the repository's code when the zip that replaces it is corrupt", () => {
 		const remote = gitRemote({
 			"main.py": "print('from git')",
 		});
@@ -1068,7 +1068,7 @@ describe("running the launcher", () => {
 		expect(existsSync(join(state, "history"))).toBe(false);
 	});
 
-	test("keeps the uploaded code when the repository that replaces it cannot be fetched", () => {
+	it("keeps the uploaded code when the repository that replaces it cannot be fetched", () => {
 		place(
 			zipOf("one", {
 				"main.py": "one()",
@@ -1093,14 +1093,14 @@ describe("running the launcher", () => {
 
 		expect(failed.code).toBe(1);
 		expect(failed.lines.at(-1)).toStartWith("serverk: deployment dep_2 failed: sync: ");
-		expect(failed.lines.some((line) => line.includes("ما قدرنا نسحب كود بوتك"))).toBe(true);
+		expect(failed.lines.some((line) => line.includes("تعذّر سحب كود بوتك"))).toBe(true);
 		expect(failed.lines.join("\n")).not.toContain("ghs_expired_token");
 		expect(readFileSync(join(app, "main.py"), "utf8")).toBe("one()");
 		expect(existsSync(join(state, "history"))).toBe(true);
 		expect(existsSync(join(app, ".git"))).toBe(false);
 	});
 
-	test("refuses a repository that tracks .serverk instead of letting it overwrite the stamps", () => {
+	it("refuses a repository that tracks .serverk instead of letting it overwrite the stamps", () => {
 		const remote = gitRemote({
 			"main.py": "run()",
 			".serverk/deployment.json": "{}",
@@ -1121,7 +1121,7 @@ describe("running the launcher", () => {
 		expect(existsSync(join(app, "main.py"))).toBe(false);
 	});
 
-	test("installs and starts with no git token left in the launcher's own environment", () => {
+	it("installs and starts with no git token left in the launcher's own environment", () => {
 		const remote = gitRemote({
 			"main.py": "import os\nprint('bot ' + os.environ.get('SERVERK_GIT_TOKEN', 'none'), flush=True)\n",
 		});
@@ -1161,7 +1161,7 @@ describe("running the launcher", () => {
 		});
 	};
 
-	test("drops a shipped requirements file with its snapshot and installs the next snapshot from its own manifest", () => {
+	it("drops a shipped requirements file with its snapshot and installs the next snapshot from its own manifest", () => {
 		fakePip();
 
 		const first = deployWithPip("snap_a", {
@@ -1183,7 +1183,7 @@ describe("running the launcher", () => {
 		expect(second.lines.at(-1)).toBe("the bot ran");
 	});
 
-	test("ignores a requirements file the snapshot does not carry when it picks how to install", () => {
+	it("ignores a requirements file the snapshot does not carry when it picks how to install", () => {
 		fakePip();
 
 		const project = {
@@ -1206,7 +1206,7 @@ describe("running the launcher", () => {
 		expect(readFileSync(join(app, "requirements.txt"), "utf8")).toBe("left==1.0\n");
 	});
 
-	test("fails the install stage with npm's reason, not the path of its debug log", () => {
+	it("fails the install stage with npm's reason, not the path of its debug log", () => {
 		const script = join(root, "npm404.sh");
 
 		writeFileSync(script, transcriptScript(NPM_404_TRANSCRIPT), {
@@ -1224,7 +1224,7 @@ describe("running the launcher", () => {
 		);
 	});
 
-	test("fails the install stage with pip's summary, not its closing hint", () => {
+	it("fails the install stage with pip's summary, not its closing hint", () => {
 		const python = join(app, ".venv", "bin", "python");
 
 		rmSync(python, {
@@ -1245,7 +1245,7 @@ describe("running the launcher", () => {
 		);
 	});
 
-	test("keeps only the current snapshot and the ten before it", () => {
+	it("keeps only the current snapshot and the ten before it", () => {
 		for (let index = 1; index <= 12; index += 1) {
 			place(
 				zipOf(`s${index}`, {

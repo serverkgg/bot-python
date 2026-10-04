@@ -17,25 +17,25 @@ const PLATFORM_LABELS: Record<BotPlatform, Bridge.Text> = {
 		en: "Discord bot",
 	},
 	[BotPlatform.Telegram]: {
-		ar: "بوت تيليجرام",
+		ar: "بوت تيليقرام",
 		en: "Telegram bot",
 	},
 };
 
 const INVITE_LABELS: Record<BotPlatform, Bridge.Text> = {
 	[BotPlatform.Discord]: {
-		ar: "ضيفه لسيرفر ديسكورد",
+		ar: "أضفه إلى سيرفر ديسكورد",
 		en: "Add it to a Discord server",
 	},
 	[BotPlatform.Telegram]: {
-		ar: "افتحه في تيليجرام",
+		ar: "افتحه في تيليقرام",
 		en: "Open it in Telegram",
 	},
 };
 
 const NAME_PENDING: Bridge.Text = {
-	ar: "بيطلع اسم بوتك هنا أول ما يشتغل ويسجّل دخوله.",
-	en: "Your bot's name shows up here once it runs and logs in.",
+	ar: "يظهر اسم بوتك هنا بعد تشغيله وتسجيل دخوله.",
+	en: "Your bot's name shows up here once it runs and signs in.",
 };
 
 const identityStats = (identity: BotIdentity): Bridge.DetailStat[] => {
@@ -59,7 +59,7 @@ const identityStats = (identity: BotIdentity): Bridge.DetailStat[] => {
 						key: "seen",
 						label: {
 							ar: "آخر تسجيل دخول",
-							en: "Last login",
+							en: "Last sign-in",
 						},
 						value: identity.seenAt,
 						format: BridgeDetailFormat.Date,

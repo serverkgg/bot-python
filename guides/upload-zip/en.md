@@ -1,6 +1,6 @@
 ## Upload your code
 
-On «Run your bot», pick **Upload** and drop your bot folder or a zip. We zip the folder ourselves and leave out `.venv`, `__pycache__`, `.git` and `.env`, because we install the dependencies ourselves and your variables belong on the variables page.
+On "Run your bot", pick **Upload the code** and drop your bot folder or a zip. We zip the folder ourselves and leave out `.venv`, `__pycache__`, `.git` and `.env`, because we install the dependencies ourselves and your variables belong on the variables page.
 
 If every file in the zip sits inside one folder, we lift them out so `requirements.txt` lands at the top of your bot folder.
 

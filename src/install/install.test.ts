@@ -1,14 +1,14 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { installFailure } from "./install";
 
 describe("reading a failed install", () => {
-	test("takes the launcher's last failure line, whichever stage failed", () => {
+	it("takes the launcher's last failure line, whichever stage failed", () => {
 		expect(
 			installFailure(
 				[
 					"serverk: installing dependencies: npm ci",
 					"npm error code EUSAGE",
-					"serverk: ما قدرنا نثبّت مكتبات بوتك.",
+					"serverk: تعذّر تثبيت مكتبات بوتك.",
 					"serverk: install failed: npm error `npm ci` can only install with an existing package-lock.json",
 				].join("\n"),
 				1,
@@ -22,7 +22,7 @@ describe("reading a failed install", () => {
 		).toBe("commit 0123456789ab is not in the repository");
 	});
 
-	test("falls back to the exit code when the launcher printed nothing", () => {
+	it("falls back to the exit code when the launcher printed nothing", () => {
 		expect(installFailure("", 137)).toBe("the bot install exited with code 137");
 	});
 });

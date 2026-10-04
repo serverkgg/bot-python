@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { BridgeKind, BridgeLayout, BridgeStopSignal } from "@serverkgg/bridge";
 import {
@@ -19,7 +19,7 @@ const tabs = driver.panel?.tabs ?? [];
 const LAUNCHER_READY_LINE = "serverk: bot process starting";
 
 describe("validating the driver the way the platform does", () => {
-	test("passes the same validate run that happens in the hook and at release", () => {
+	it("passes the same validate run that happens in the hook and at release", () => {
 		const result = Bun.spawnSync(
 			[
 				`${ROOT}node_modules/.bin/serverk-bridge`,
@@ -41,7 +41,7 @@ describe("validating the driver the way the platform does", () => {
 		expect(result.exitCode).toBe(0);
 	});
 
-	test("ships the detection table the launcher reads inside the image", () => {
+	it("ships the detection table the launcher reads inside the image", () => {
 		expect(readFileSync(`${ROOT}image/Dockerfile`, "utf8")).toContain(
 			"COPY image/launcher.py image/git-askpass image/detect.json /serverk/",
 		);
@@ -49,11 +49,11 @@ describe("validating the driver the way the platform does", () => {
 });
 
 describe("assembling the bot driver", () => {
-	test("never gates a start behind a setup flow", () => {
+	it("never gates a start behind a setup flow", () => {
 		expect(driver.setup).toBeUndefined();
 	});
 
-	test("keeps one bot tab with only the identity card on it", () => {
+	it("keeps one bot tab with only the identity card on it", () => {
 		expect(tabs.map((tab) => tab.id)).toEqual([
 			BOT_TAB,
 		]);
@@ -70,7 +70,7 @@ describe("assembling the bot driver", () => {
 		]);
 	});
 
-	test("registers the identity module and the deploy module the platform invokes", () => {
+	it("registers the identity module and the deploy module the platform invokes", () => {
 		expect(driver.modules?.[BOT_IDENTITY_MODULE]?.kind).toBe(BridgeKind.Detail);
 
 		const deploy = driver.modules?.[BOT_DEPLOY_MODULE];
@@ -79,19 +79,19 @@ describe("assembling the bot driver", () => {
 		expect(deploy?.kind === BridgeKind.Actions && deploy.requiresRunning).toBe(false);
 	});
 
-	test("starts through the launcher, flips to running on its ready line and waits up to fifteen minutes for it", () => {
+	it("starts through the launcher, flips to running on its ready line and waits up to fifteen minutes for it", () => {
 		expect(driver.lifecycle.ready?.test(LAUNCHER_READY_LINE)).toBe(true);
 		expect(driver.lifecycle.ready?.test(`${LAUNCHER_READY_LINE} now`)).toBe(false);
 		expect(driver.lifecycle.readyTimeoutSeconds).toBe(900);
 		expect(driver.lifecycle.onReady).toBeDefined();
 	});
 
-	test("stops the bot with SIGTERM at once and kills it after fifteen seconds", () => {
+	it("stops the bot with SIGTERM at once and kills it after fifteen seconds", () => {
 		expect(driver.lifecycle.stopSignal).toBe(BridgeStopSignal.Term);
 		expect(driver.lifecycle.stopTimeoutSeconds).toBe(15);
 	});
 
-	test("colours the launcher lines and python errors in the console", () => {
+	it("colours the launcher lines and python errors in the console", () => {
 		expect(driver.terminal?.rules).toEqual([
 			...LAUNCHER_RULES,
 			...PYTHON_RULES,
@@ -99,7 +99,7 @@ describe("assembling the bot driver", () => {
 		expect(driver.terminal?.commands).toEqual([]);
 	});
 
-	test("counts no players, because a bot has none", async () => {
+	it("counts no players, because a bot has none", async () => {
 		expect(await driver.query?.sample(fakeContext().context)).toEqual({
 			online: null,
 			max: null,

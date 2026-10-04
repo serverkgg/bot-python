@@ -28,6 +28,6 @@ The step is one of `sync` (pulling the code), `snapshot` (unpacking an uploaded 
 
 ## Roll back to an older version
 
-In the **Deployments** tab, pick any deployment that succeeded before and press **Rollback**. We run a new deployment with exactly that old code, and files deleted since then come back.
+In the **Deployments** tab, pick any deployment that succeeded before and press **Roll back to this deployment**. We run a new deployment with exactly that old code, and files deleted since then come back.
 
 > [!note] A rollback restores the code only. Your variables stay as they are, so if the old code needs a variable you changed, change it back yourself.

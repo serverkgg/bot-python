@@ -248,27 +248,27 @@ REDACTED = "***"
 
 HISTORY_IDENTITY = ("-c", "user.name=Serverk", "-c", "user.email=deploy@serverk.gg", "-c", "commit.gpgsign=false")
 
-SYNC_HINT = "ما قدرنا نسحب كود بوتك من الريبو. تأكد إن الريبو والفرع موجودين، ولو الريبو خاص تأكد إن تطبيق Serverk على GitHub يقدر يوصل له."
+SYNC_HINT = "تعذّر سحب كود بوتك من الريبو. تأكد من وجود الريبو والفرع، وإذا كان الريبو خاصًا فتأكد أن تطبيق سيرفرك على GitHub لديه صلاحية الوصول إليه."
 
-PINNED_HINT = "ما لقينا الكوميت اللي تبي تنشره في الريبو. يمكن انحذف من الفرع. انشر من جديد من آخر كوميت."
+PINNED_HINT = "الكوميت المطلوب نشره غير موجود في الريبو، وقد يكون حُذف من الفرع. انشر من جديد من آخر كوميت."
 
-TRACKED_STATE_HINT = "الريبو فيه مجلد .serverk، وهذا الاسم محجوز لسيرفرك. احذف المجلد من الريبو وانشر من جديد."
+TRACKED_STATE_HINT = "يحتوي الريبو على مجلد .serverk، وهذا الاسم محجوز لمنصة سيرفرك. احذف المجلد من الريبو وانشر من جديد."
 
-LINK_HINT = "رابط الريبو لازم يكون رابط https كامل بدون اسم مستخدم أو كلمة مرور، والفرع اسم فرع Git صحيح."
+LINK_HINT = "رابط الريبو أو اسم الفرع غير صحيح. استخدم رابط https كاملًا دون اسم مستخدم أو كلمة مرور، واسم فرع Git صحيحًا."
 
-REQUEST_HINT = "طلب النشر هذا ناقص أو غلط. انشر من جديد من صفحة البوت."
+REQUEST_HINT = "طلب النشر ناقص أو غير صحيح. انشر من جديد من صفحة البوت."
 
-OCCUPIED_HINT = "ملفات بوتك فيها أشياء مو من ريبو Git، فما نقدر نسحب الريبو فوقها. امسح الملفات من مدير الملفات وانشر من جديد."
+OCCUPIED_HINT = "يحتوي مجلد بوتك على ملفات ليست من ريبو Git، ولذلك تعذّر سحب الريبو فوقها. احذف الملفات من مدير الملفات وانشر من جديد."
 
-SNAPSHOT_MISSING_HINT = "ما لقينا نسخة الكود اللي تبي تنشرها. ارفعها من جديد وانشر."
+SNAPSHOT_MISSING_HINT = "نسخة الكود المطلوب نشرها غير موجودة. ارفعها من جديد ثم انشر."
 
-SNAPSHOT_BROKEN_HINT = "ملف الكود اللي رفعته فيه مشكلة وما قدرنا نفكّه. تأكد إنه ملف zip سليم وارفعه من جديد."
+SNAPSHOT_BROKEN_HINT = "تعذّر فك ضغط ملف الكود المرفوع. تأكد أنه ملف zip سليم وارفعه من جديد."
 
-ROOT_HINT = "ما لقينا مجلد الكود اللي حددته داخل ملفات بوتك. تأكد من اسم المجلد في إعدادات بوتك وانشر من جديد."
+ROOT_HINT = "مجلد الكود المحدد غير موجود داخل ملفات بوتك. تأكد من اسم المجلد في إعدادات البوت وانشر من جديد."
 
-INSTALL_HINT = "ما قدرنا نثبّت مكتبات بوتك. شوف السطور اللي فوق، صلّح requirements.txt وانشر من جديد."
+INSTALL_HINT = "تعذّر تثبيت مكتبات بوتك. راجع السطور السابقة في الكونسول، ثم صحّح requirements.txt وانشر من جديد."
 
-START_HINT = "ما لقينا طريقة نشغّل فيها بوتك. أضف ملف main.py أو bot.py، أو حط أمر التشغيل من إعدادات البوت."
+START_HINT = "لم نجد طريقة لتشغيل بوتك. أضف ملف main.py أو bot.py، أو اضبط أمر التشغيل من إعدادات البوت."
 
 
 class LaunchFailure(Exception):
@@ -1052,7 +1052,7 @@ def sync_git(context):
         raise LaunchFailure(
             STAGE_SYNC,
             OCCUPIED_HINT,
-            "sync failed: your bot folder already holds files that are not a Git checkout — delete them and deploy again",
+            "sync failed: your bot folder already holds files that are not a Git checkout. Delete them and deploy again",
             "the bot folder holds files that are not a Git checkout",
             EXIT_CONFIG,
         )
@@ -1122,7 +1122,7 @@ def sync_git(context):
             raise LaunchFailure(STAGE_SYNC, error.arabic, f"sync failed: {detail}", detail) from error
 
         if ref is None and before:
-            say(f"sync failed: {detail} — starting the last pulled code ({short_commit(before)})")
+            say(f"sync failed: {detail}. Starting the last pulled code ({short_commit(before)})")
             return {"source": SOURCE_GIT, "commit": before}
 
         raise LaunchFailure(STAGE_SYNC, SYNC_HINT, f"sync failed: {detail}", detail) from error
@@ -1842,7 +1842,7 @@ def launch(mode, context):
         raise LaunchFailure(
             STAGE_START,
             START_HINT,
-            "start failed: nothing to start — add a main.py or bot.py, or set a start command in the bot's settings",
+            "start failed: nothing to start. Add a main.py or bot.py, or set a start command in the bot's settings",
             "nothing to start",
             EXIT_CONFIG,
         )

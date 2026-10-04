@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { BridgeDetailFormat } from "@serverkgg/bridge";
 import { BotPlatform, IDENTITY_CACHE_FILE } from "@serverkgg/bridge/bot";
 import { fakeContext } from "../testing";
@@ -11,11 +11,11 @@ const DISCORD_TOKEN = `${btoa(DISCORD_ID).replaceAll("=", "")}.GxYz12.${"a".repe
 const TELEGRAM_TOKEN = "7123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw";
 
 describe("the identity card", () => {
-	test("shows nothing until the bot names a platform or holds a token", async () => {
+	it("shows nothing until the bot names a platform or holds a token", async () => {
 		expect(await readIdentity(fakeContext().context)).toBeNull();
 	});
 
-	test("shows the id from the token and waits for the name, with an invite link already", async () => {
+	it("shows the id from the token and waits for the name, with an invite link already", async () => {
 		const detail = await readIdentity(
 			fakeContext({
 				secrets: {
@@ -49,7 +49,7 @@ describe("the identity card", () => {
 		expect(detail?.description).not.toBeNull();
 	});
 
-	test("names the bot from its own login line and opens it in Telegram", async () => {
+	it("names the bot from its own login line and opens it in Telegram", async () => {
 		const detail = await readIdentity(
 			fakeContext({
 				secrets: {
@@ -68,14 +68,14 @@ describe("the identity card", () => {
 		expect(detail).toMatchObject({
 			title: "serverk_test_bot",
 			subtitle: {
-				ar: "بوت تيليجرام",
+				ar: "بوت تيليقرام",
 				en: "Telegram bot",
 			},
 			description: null,
 			links: [
 				{
 					label: {
-						ar: "افتحه في تيليجرام",
+						ar: "افتحه في تيليقرام",
 						en: "Open it in Telegram",
 					},
 					url: "https://t.me/serverk_test_bot",
@@ -88,7 +88,7 @@ describe("the identity card", () => {
 		]);
 	});
 
-	test("reads while the bot is stopped and makes no network call", () => {
+	it("reads while the bot is stopped and makes no network call", () => {
 		expect(identity.requiresRunning).toBe(false);
 	});
 });

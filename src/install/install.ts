@@ -28,8 +28,8 @@ export const installFailure = (stdout: string, code: number) => {
 
 const installFailed = (detail: string) => {
 	return new BridgeUserError({
-		ar: `ما قدرنا نجهّز بوتك: ${detail}`,
-		en: `We could not get your bot ready: ${detail}`,
+		ar: `تعذّر تجهيز بوتك: ${detail}`,
+		en: `We couldn't get your bot ready: ${detail}`,
 	});
 };
 
