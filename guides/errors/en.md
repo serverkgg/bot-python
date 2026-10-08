@@ -63,7 +63,7 @@ Give it a few minutes before you start it again, and check the code that sends r
 
 ## Not enough RAM while running
 
-No library prints a line for this. Your bot stops at once when it goes past your plan's RAM, with exit code `137`, and its page shows "Not enough RAM". Upgrade the plan for more RAM, or cut down what your bot keeps in memory.
+Python prints `MemoryError` as the last line of the traceback when memory runs out, and your bot's page names the cause from that line. When your plan's RAM runs out first, nothing is printed: your bot stops at once with exit code `137`, and its page shows "Not enough RAM". Upgrade the plan for more RAM, or cut down what your bot keeps in memory.
 
 ## Not enough RAM during the install
 
