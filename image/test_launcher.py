@@ -1,7 +1,11 @@
+import contextlib
 import io
 import json
 import os
+import platform
+import shutil
 import stat
+import tempfile
 import unittest
 import zipfile
 
@@ -72,10 +76,40 @@ class DetectStartTest(unittest.TestCase):
             [".venv/bin/python", "-u", "src/main.py"],
         )
 
-    def test_reads_a_worker_or_bot_procfile_line_last(self):
+    def test_reads_a_worker_or_bot_procfile_line_first_after_serverk_json(self):
         self.assertEqual(launcher.procfile_command("web: gunicorn app\nbot: python bot/run.py\n"), "python bot/run.py")
         self.assertEqual(launcher.procfile_command("bot: python a.py\nworker: python b.py"), "python b.py")
         self.assertIsNone(launcher.procfile_command("web: gunicorn app"))
+        self.assertEqual(launcher.procfile_command("\ufeffworker: python main.py\r\n"), "python main.py")
+        self.assertEqual(launcher.procfile_command("worker:\u00a0python main.py\u00a0\n"), "python main.py")
+        self.assertIsNone(launcher.procfile_command("web: gunicorn app\rworker: python main.py\r"))
+        self.assertEqual(
+            launcher.detect_start({"main.py"}, procfile="worker: python -m bot\n", packages=["bot"]),
+            {"source": "procfile", "argv": ["sh", "-c", "exec python -m bot"]},
+        )
+        self.assertEqual(
+            launcher.detect_start(
+                {"main.py"},
+                procfile="worker: python -m bot\n",
+                serverk_json=launcher.serverk_json_of(json.dumps({"start": "python run.py"})),
+            )["source"],
+            "serverk-json",
+        )
+        self.assertEqual(launcher.detect_start({"main.py"}, procfile="web: gunicorn app")["source"], "file")
+
+    def test_runs_the_one_top_level_package_with_a_main_module_when_no_start_file_exists(self):
+        self.assertEqual(
+            launcher.detect_start(set(), packages=["mybot"]),
+            {"source": "package", "argv": [".venv/bin/python", "-u", "-m", "mybot"]},
+        )
+        self.assertEqual(launcher.detect_start({"bot.py"}, packages=["mybot"])["argv"], [".venv/bin/python", "-u", "bot.py"])
+        self.assertIsNone(launcher.detect_start(set(), packages=["mybot", "other"]))
+
+    def test_skips_folders_that_are_not_the_bot_when_counting_packages(self):
+        skipped = ["tests", "test", "docs", "examples", "scripts", "venv", "node_modules", "__pycache__", ".venv", "my-bot"]
+
+        self.assertIsNone(launcher.detect_start(set(), packages=skipped))
+        self.assertEqual(launcher.detect_start(set(), packages=[*skipped, "mybot"])["argv"][-1], "mybot")
 
     def test_finds_nothing_in_an_empty_folder(self):
         self.assertIsNone(launcher.detect_start(set()))
@@ -286,6 +320,14 @@ PIP_BUILD_TRANSCRIPT = [
 ]
 
 
+UV_NO_SOLUTION_TRANSCRIPT = [
+    "  × No solution found when resolving dependencies:",
+    "  ╰─▶ Because serverk-no-such-package-e404-proof was not found in the package",
+    "      registry and you require serverk-no-such-package-e404-proof==1.0, we can",
+    "      conclude that your requirements are unsatisfiable.",
+]
+
+
 class FailureDetailTest(unittest.TestCase):
     def test_names_npm_code_and_reason_never_the_debug_log(self):
         self.assertEqual(
@@ -302,6 +344,18 @@ class FailureDetailTest(unittest.TestCase):
     def test_skips_pip_trailers_after_a_build_failure(self):
         self.assertEqual(
             launcher.failure_detail(PIP_BUILD_TRANSCRIPT), "× Encountered error while generating package metadata."
+        )
+
+    def test_joins_uv_resolution_failure_with_its_wrapped_reason(self):
+        self.assertEqual(
+            launcher.failure_detail([*UV_NO_SOLUTION_TRANSCRIPT, "", "  hint: Packages were unavailable"]),
+            "× No solution found when resolving dependencies: Because serverk-no-such-package-e404-proof was not "
+            "found in the package registry and you require serverk-no-such-package-e404-proof==1.0, we can conclude "
+            "that your requirements are unsatisfiable.",
+        )
+        self.assertEqual(
+            launcher.failure_detail(["Resolved 1 package in 12ms", "  × Failed to build `bad==1.0`", "  ├─▶ boom"]),
+            "× Failed to build `bad==1.0`: boom",
         )
 
     def test_keeps_the_last_informative_line_of_anything_else(self):
@@ -329,11 +383,429 @@ class DependenciesTest(unittest.TestCase):
         self.assertEqual(launcher.occupied_entries([".serverk", "main.py"]), ["main.py"])
 
 
+class PythonVersionTest(unittest.TestCase):
+    def version_of(self, files):
+        return launcher.python_version_of(files.get)
+
+    def test_reads_the_version_files_in_order_and_keeps_major_and_minor(self):
+        everything = {
+            ".python-version": "3.11.9\n",
+            "runtime.txt": "python-3.10.4",
+            "Pipfile": '[requires]\npython_version = "3.9"\n',
+            ".tool-versions": "python 3.13.1\n",
+        }
+
+        self.assertEqual(self.version_of(everything), "3.11")
+        self.assertEqual(self.version_of({**everything, ".python-version": None}), "3.10")
+        self.assertEqual(self.version_of({".tool-versions": "nodejs 24\npython 3.13.1 3.12.0\n"}), "3.13")
+        self.assertIsNone(self.version_of({}))
+
+    def test_reads_runtime_txt_only_with_its_python_prefix(self):
+        self.assertEqual(self.version_of({"runtime.txt": "python-3.12.7\n"}), "3.12")
+        self.assertIsNone(self.version_of({"runtime.txt": "3.12.7\n"}))
+        self.assertEqual(self.version_of({"runtime.txt": "3.12.7\n", "Pipfile": "[requires]\npython_version=3.10\n"}), "3.10")
+        self.assertIsNone(self.version_of({"Pipfile": "python_version = 'x'\npython_version = 3.10\n"}))
+
+    def test_reads_the_pipfile_python_version_key_and_nothing_like_it(self):
+        pipfile = '[packages]\ndiscord-py = "*"\n\n[requires]\npython_full_version = "3.10.2"\npython_version = "3.11"\n'
+
+        self.assertEqual(self.version_of({"Pipfile": pipfile}), "3.11")
+        self.assertIsNone(self.version_of({"Pipfile": '[requires]\npython_full_version = "3.10.2"\n'}))
+
+    def test_skips_comments_and_whitespace_and_stops_at_the_first_version_line(self):
+        self.assertEqual(self.version_of({".python-version": "﻿# pinned\n\n  v3.12 \n"}), "3.12")
+        self.assertEqual(self.version_of({".python-version": "3\n"}), "3")
+        self.assertEqual(self.version_of({".python-version": "pypy3.10\n", "runtime.txt": "python-3.9.1"}), "3.9")
+
+    def test_asks_uv_only_for_a_version_the_image_python_does_not_satisfy(self):
+        self.assertIsNone(launcher.managed_python_of(None, "3.12.3"))
+        self.assertIsNone(launcher.managed_python_of("3.12", "3.12.3"))
+        self.assertIsNone(launcher.managed_python_of("3", "3.12.3"))
+        self.assertEqual(launcher.managed_python_of("3.11", "3.12.3"), "3.11")
+        self.assertEqual(launcher.managed_python_of("3.1", "3.12.3"), "3.1")
+
+
+class InstallCommandTest(unittest.TestCase):
+    TOOLS = {"PATH": "/usr/local/bin:/usr/bin:/bin", "DISCORD_TOKEN": "token"}
+
+    def run_of(self, manager):
+        return launcher.install_run_of(launcher.BUILT_IN_TABLE["python"]["installCommands"][manager], "/srv/bot", self.TOOLS)
+
+    def test_runs_every_manifest_through_the_command_the_table_names(self):
+        self.assertEqual(
+            {manager: self.run_of(manager)[0] for manager in launcher.BUILT_IN_TABLE["python"]["installCommands"]},
+            {
+                "requirements": ["uv", "pip", "install", "-r", "requirements.txt"],
+                "uv": ["uv", "sync", "--locked", "--no-dev"],
+                "poetry": ["uv", "pip", "install", "."],
+                "pdm": ["uv", "pip", "install", "."],
+                "pipenv": ["pipenv", "install"],
+                "project": ["uv", "pip", "install", "."],
+            },
+        )
+
+    def test_points_uv_at_the_project_venv(self):
+        _, environment = self.run_of("uv")
+
+        self.assertEqual(
+            environment,
+            {**self.TOOLS, "VIRTUAL_ENV": "/srv/bot/.venv", "UV_PROJECT_ENVIRONMENT": "/srv/bot/.venv"},
+        )
+
+    def test_points_pipenv_at_the_project_venv_and_nothing_else(self):
+        _, environment = self.run_of("pipenv")
+
+        self.assertEqual(environment, {**self.TOOLS, "VIRTUAL_ENV": "/srv/bot/.venv"})
+
+    def test_hashes_a_lockfile_with_the_file_it_installs_from(self):
+        self.assertEqual(launcher.dependency_files({"manager": "requirements", "manifest": "requirements.txt"}), ["requirements.txt"])
+        self.assertEqual(launcher.dependency_files({"manager": "uv", "manifest": "uv.lock"}), ["uv.lock", "pyproject.toml"])
+        self.assertEqual(launcher.dependency_files({"manager": "poetry", "manifest": "poetry.lock"}), ["poetry.lock", "pyproject.toml"])
+        self.assertEqual(launcher.dependency_files({"manager": "pipenv", "manifest": "Pipfile"}), ["Pipfile", "Pipfile.lock"])
+        self.assertEqual(launcher.dependency_files(None), [])
+
+    def test_keeps_the_cache_and_python_builds_in_the_state_folder(self):
+        environment = launcher.tool_environment({}, "/home/container/.serverk")
+
+        self.assertEqual(environment["UV_CACHE_DIR"], "/home/container/.serverk/cache/uv")
+        self.assertEqual(environment["UV_PYTHON_INSTALL_DIR"], "/home/container/.serverk/cache/python")
+        self.assertEqual(environment["PIPENV_CACHE_DIR"], "/home/container/.serverk/cache/pipenv")
+
+    def test_marks_installs_as_ci_and_keeps_pipenv_away_from_the_bot_env_file(self):
+        environment = launcher.tool_environment({"DISCORD_TOKEN": "token"}, "/home/container/.serverk")
+
+        self.assertEqual(environment["CI"], "true")
+        self.assertEqual(environment["PIPENV_DONT_LOAD_ENV"], "1")
+        self.assertEqual(environment["UV_MANAGED_PYTHON"], "1")
+        self.assertEqual(environment["DISCORD_TOKEN"], "token")
+
+
+FAKE_TOOL = """#!/bin/sh
+echo "$(basename "$0") $* venv=${VIRTUAL_ENV:-none} project=${UV_PROJECT_ENVIRONMENT:-none}"
+if [ "$1" = venv ]; then
+  for last; do [ "$previous" = --python ] && version=$last; previous=$last; done
+  mkdir -p "$last/bin" && touch "$last/bin/python" && echo "version_info = $version.0" > "$last/pyvenv.cfg"
+fi
+exit ${FAKE_TOOL_EXIT:-0}
+"""
+
+
+class InstallTest(unittest.TestCase):
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="bot-python-install-")
+        self.project = os.path.join(self.root, "app")
+        self.state = os.path.join(self.project, ".serverk")
+        self.bin = os.path.join(self.root, "bin")
+        self.venv = os.path.join(self.project, ".venv")
+
+        for directory in (self.state, self.bin, os.path.join(self.venv, "bin")):
+            os.makedirs(directory)
+
+        for tool in ("uv", "pipenv"):
+            path = os.path.join(self.bin, tool)
+
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(FAKE_TOOL)
+
+            os.chmod(path, 0o755)
+
+        self.write(".venv/bin/python", "")
+        self.write(".venv/pyvenv.cfg", f"home = /usr/local/bin\nversion = {platform.python_version()}\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def write(self, name, content):
+        with open(os.path.join(self.project, name), "w", encoding="utf-8") as handle:
+            handle.write(content)
+
+    def install(self, reinstall=False, **env):
+        context = {
+            "project_dir": self.project,
+            "app_dir": self.project,
+            "state_dir": self.state,
+            "env": {"PATH": f"{self.bin}:/usr/bin:/bin", **env},
+            "table": launcher.BUILT_IN_TABLE,
+            "synced": {"source": launcher.SOURCE_LOCAL, "commit": None},
+        }
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            launcher.install_dependencies(context, reinstall=reinstall, require_manifest=False)
+
+        return output.getvalue().splitlines()
+
+    def stamp(self):
+        return launcher.read_json(os.path.join(self.state, "deps.json"))
+
+    def test_installs_requirements_with_uv_into_the_project_venv(self):
+        self.write("requirements.txt", "discord.py==2.7.1\n")
+
+        self.assertEqual(
+            self.install(),
+            [
+                "serverk: installing dependencies: uv pip install -r requirements.txt",
+                f"uv pip install -r requirements.txt venv={self.venv} project={self.venv}",
+                "serverk: dependencies installed",
+            ],
+        )
+        self.assertEqual(self.install(), ["serverk: dependencies are up to date (uv)"])
+
+    def test_installs_a_pipfile_with_pipenv_into_the_project_venv(self):
+        self.write("Pipfile", '[packages]\ndiscord-py = "==2.7.1"\n')
+
+        self.assertIn(f"pipenv install venv={self.venv} project=none", self.install())
+
+        self.write("Pipfile.lock", "{}")
+
+        self.assertIn("serverk: installing dependencies: pipenv install", self.install())
+
+    def test_says_the_lockfile_is_not_used_when_installing_the_project_instead(self):
+        self.write("pyproject.toml", '[project]\nname = "bot"\nversion = "1"\n')
+        self.write("poetry.lock", "# poetry\n")
+
+        self.assertEqual(
+            self.install()[:2],
+            [
+                "serverk: poetry.lock is not used, installing from pyproject.toml",
+                "serverk: installing dependencies: uv pip install .",
+            ],
+        )
+
+        self.write("uv.lock", "version = 1\n")
+
+        self.assertEqual(
+            self.install(),
+            [
+                "serverk: installing dependencies: uv sync --locked --no-dev",
+                f"uv sync --locked --no-dev venv={self.venv} project={self.venv}",
+                "serverk: dependencies installed",
+            ],
+        )
+
+    def test_reinstalls_when_the_lockfile_or_the_project_beside_it_changes(self):
+        self.write("pyproject.toml", '[project]\nname = "bot"\nversion = "1"\n')
+        self.write("uv.lock", "version = 1\n")
+        self.install()
+        self.write("pyproject.toml", '[project]\nname = "bot"\nversion = "2"\n')
+
+        self.assertIn("serverk: installing dependencies: uv sync --locked --no-dev", self.install())
+
+        self.write("uv.lock", "version = 2\n")
+
+        self.assertIn("serverk: installing dependencies: uv sync --locked --no-dev", self.install())
+        self.assertEqual(self.install(), ["serverk: dependencies are up to date (uv)"])
+
+    def test_builds_the_venv_with_uv_for_the_python_the_files_name_and_rebuilds_when_it_changes(self):
+        self.write("requirements.txt", "discord.py==2.7.1\n")
+        self.write(".python-version", "3.11\n")
+
+        lines = self.install()
+
+        self.assertEqual(
+            lines[:3],
+            [
+                "serverk: Python changed to 3.11, rebuilding .venv",
+                "serverk: creating .venv with Python 3.11 through uv",
+                f"uv venv --seed --managed-python --python 3.11 {self.venv} venv=none project=none",
+            ],
+        )
+        self.assertIn("serverk: installing dependencies: uv pip install -r requirements.txt", lines)
+        self.assertEqual(self.stamp()["runtime"], "3.11")
+        self.assertEqual(self.install(), ["serverk: dependencies are up to date (uv)"])
+
+        os.remove(os.path.join(self.project, ".python-version"))
+        self.write("runtime.txt", "python-3.10.4\n")
+
+        self.assertEqual(
+            self.install()[:3],
+            [
+                "serverk: Python changed to 3.10, rebuilding .venv",
+                "serverk: creating .venv with Python 3.10 through uv",
+                f"uv venv --seed --managed-python --python 3.10 {self.venv} venv=none project=none",
+            ],
+        )
+
+    def test_keeps_the_image_python_when_the_files_name_it(self):
+        self.write("requirements.txt", "discord.py==2.7.1\n")
+        self.write(".python-version", ".".join(platform.python_version().split(".")[:2]))
+
+        self.assertEqual(self.install()[0], "serverk: installing dependencies: uv pip install -r requirements.txt")
+        self.assertEqual(self.stamp()["runtime"], platform.python_version())
+
+    def test_rebuilds_a_venv_on_another_python_with_no_stamp_to_say_so(self):
+        self.write(".venv/pyvenv.cfg", "home = /usr/local/bin\nversion = 3.12.3\n")
+        self.write(".python-version", "3.11\n")
+        self.write("requirements.txt", "needs-311==1.0\n")
+
+        self.assertIsNone(self.stamp())
+        self.assertEqual(
+            self.install()[:3],
+            [
+                "serverk: Python changed to 3.11, rebuilding .venv",
+                "serverk: creating .venv with Python 3.11 through uv",
+                f"uv venv --seed --managed-python --python 3.11 {self.venv} venv=none project=none",
+            ],
+        )
+
+    def test_rebuilds_after_a_failed_install_once_the_files_name_another_python(self):
+        self.write("requirements.txt", "needs-311==1.0\n")
+
+        with self.assertRaises(launcher.LaunchFailure):
+            self.install(FAKE_TOOL_EXIT="1")
+
+        self.assertIsNone(self.stamp())
+
+        self.write(".python-version", "3.11\n")
+
+        self.assertEqual(self.install()[0], "serverk: Python changed to 3.11, rebuilding .venv")
+
+    def test_creates_the_venv_for_the_python_the_files_name_with_nothing_to_install(self):
+        shutil.rmtree(self.venv)
+        self.write(".python-version", "3.11\n")
+
+        self.assertEqual(
+            self.install(),
+            [
+                "serverk: creating .venv with Python 3.11 through uv",
+                f"uv venv --seed --managed-python --python 3.11 {self.venv} venv=none project=none",
+                "serverk: no requirements.txt, Pipfile or pyproject.toml, skipping dependencies",
+            ],
+        )
+        self.assertEqual(launcher.venv_version_of(self.project), "3.11")
+
+    def test_leaves_the_venv_of_a_uv_lock_project_to_uv_sync(self):
+        self.write("pyproject.toml", '[project]\nname = "bot"\nversion = "1"\nrequires-python = ">=3.14"\n')
+        self.write("uv.lock", "version = 1\n")
+        sync = [
+            "serverk: installing dependencies: uv sync --locked --no-dev",
+            f"uv sync --locked --no-dev venv={self.venv} project={self.venv}",
+            "serverk: dependencies installed",
+        ]
+
+        self.assertEqual(self.install(), sync)
+
+        self.write(".venv/pyvenv.cfg", "home = /x/cpython-3.14.8/bin\nversion_info = 3.14.8\n")
+
+        self.assertEqual(self.install(), ["serverk: dependencies are up to date (uv)"])
+
+        self.write(".python-version", "3.11\n")
+
+        self.assertEqual(self.install(), sync)
+        self.assertTrue(os.path.isfile(os.path.join(self.venv, "pyvenv.cfg")))
+
+    def test_syncs_a_uv_lock_project_again_when_its_venv_is_gone(self):
+        self.write("pyproject.toml", '[project]\nname = "bot"\nversion = "1"\n')
+        self.write("uv.lock", "version = 1\n")
+        self.install()
+        shutil.rmtree(self.venv)
+
+        self.assertEqual(self.install()[0], "serverk: installing dependencies: uv sync --locked --no-dev")
+
+    def test_keeps_a_venv_whose_python_it_cannot_read(self):
+        os.remove(os.path.join(self.venv, "pyvenv.cfg"))
+        self.write(".python-version", "3.11\n")
+        self.write("requirements.txt", "discord.py==2.7.1\n")
+
+        self.assertEqual(self.install()[0], "serverk: installing dependencies: uv pip install -r requirements.txt")
+
+
+class VenvVersionTest(unittest.TestCase):
+    def test_reads_major_and_minor_from_the_venv_config_of_venv_uv_and_virtualenv(self):
+        root = tempfile.mkdtemp(prefix="bot-python-venv-")
+
+        try:
+            os.makedirs(os.path.join(root, ".venv"))
+
+            for content, version in (
+                ("home = /usr/local/bin\ninclude-system-site-packages = false\nversion = 3.12.3\n", "3.12"),
+                ("home = /x/cpython-3.11.16/bin\nimplementation = CPython\nuv = 0.12.23\nversion_info = 3.11.16\n", "3.11"),
+                ("home = /usr/bin\nversion_info = 3.10.9.final.0\n", "3.10"),
+                ("home = /usr/bin\n", None),
+            ):
+                with open(os.path.join(root, ".venv", "pyvenv.cfg"), "w", encoding="utf-8") as handle:
+                    handle.write(content)
+
+                self.assertEqual(launcher.venv_version_of(root), version, content)
+
+            self.assertIsNone(launcher.venv_version_of(os.path.join(root, "missing")))
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+
+class PackageFoldersTest(unittest.TestCase):
+    def test_lists_top_level_folders_holding_a_main_module_and_no_symlinks(self):
+        root = tempfile.mkdtemp(prefix="bot-python-packages-")
+
+        try:
+            for folder in ("mybot", "tests", "lib", "nested/inner"):
+                os.makedirs(os.path.join(root, folder))
+
+            for name in ("mybot/__main__.py", "tests/__main__.py", "nested/inner/__main__.py", "__main__.py"):
+                with open(os.path.join(root, name), "w", encoding="utf-8") as handle:
+                    handle.write("run()")
+
+            os.symlink(os.path.join(root, "mybot"), os.path.join(root, "linked"))
+
+            self.assertEqual(sorted(launcher.package_folders(root)), ["mybot", "tests"])
+            self.assertEqual(
+                launcher.resolve_start(root, {}, launcher.BUILT_IN_TABLE),
+                {"source": "package", "argv": [".venv/bin/python", "-u", "-m", "mybot"]},
+            )
+            self.assertEqual(launcher.package_folders(os.path.join(root, "missing")), [])
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+
 class TableTest(unittest.TestCase):
+    def python_table(self, **changes):
+        return json.dumps({**launcher.BUILT_IN_TABLE, "python": {**launcher.BUILT_IN_TABLE["python"], **changes}})
+
     def test_reads_a_table_and_refuses_a_broken_one(self):
+        self.assertEqual(launcher.BUILT_IN_TABLE["version"], 2)
         self.assertEqual(launcher.table_of(json.dumps(launcher.BUILT_IN_TABLE)), launcher.BUILT_IN_TABLE)
         self.assertIsNone(launcher.table_of("{}"))
-        self.assertIsNone(launcher.table_of(json.dumps({**launcher.BUILT_IN_TABLE, "version": 2})))
+        self.assertIsNone(launcher.table_of(json.dumps({**launcher.BUILT_IN_TABLE, "version": 1})))
+        self.assertIsNone(launcher.table_of(json.dumps({**launcher.BUILT_IN_TABLE, "version": 3})))
+
+    def test_refuses_a_version_one_python_table(self):
+        version_one = {
+            "startFiles": ["main.py"],
+            "manifests": [{"file": "requirements.txt", "manager": "requirements"}],
+            "installArguments": {"requirements": ["install", "-r", "requirements.txt"]},
+        }
+
+        self.assertIsNone(launcher.table_of(json.dumps({**launcher.BUILT_IN_TABLE, "version": 1, "python": version_one})))
+        self.assertIsNone(launcher.table_of(json.dumps({**launcher.BUILT_IN_TABLE, "python": version_one})))
+
+    def test_refuses_install_commands_it_cannot_run(self):
+        commands = launcher.BUILT_IN_TABLE["python"]["installCommands"]
+
+        for broken in (
+            {**commands, "uv": []},
+            {**commands, "uv": ["uv", ""]},
+            {**commands, "pipenv": "pipenv install"},
+            {**commands, "requirements": ["sh", "-c", "pip install -r requirements.txt"]},
+            {**commands, "requirements": ["pip", "install", "-r", "requirements.txt"]},
+            {key: value for key, value in commands.items() if key != "pdm"},
+        ):
+            self.assertIsNone(launcher.table_of(self.python_table(installCommands=broken)), broken)
+
+    def test_refuses_broken_version_files_and_lists(self):
+        for changes in (
+            {"versionFiles": [{"file": ".python-version", "prefix": 3}]},
+            {"versionFiles": [{"tool": "python"}]},
+            {"versionFiles": [{"file": "Pipfile", "key": "("}]},
+            {"versionFiles": None},
+            {"unhonouredManagers": None},
+            {"defaultVersion": 3.12},
+            {"manifests": []},
+        ):
+            self.assertIsNone(launcher.table_of(self.python_table(**changes)), changes)
+
+        self.assertEqual(
+            launcher.table_of(self.python_table(unhonouredManagers=[], versionFiles=[]))["python"]["versionFiles"], []
+        )
 
     def test_falls_back_to_the_built_in_table(self):
         self.assertIs(
@@ -483,6 +955,72 @@ class LinesTest(unittest.TestCase):
 
     def test_prints_the_ready_line_the_lifecycle_waits_for(self):
         self.assertEqual(launcher.READY_LINE, "serverk: bot process starting")
+
+    def test_records_a_ready_deployment_without_announcing_it(self):
+        state_dir = tempfile.mkdtemp(prefix="bot-python-record-")
+        self.addCleanup(shutil.rmtree, state_dir, True)
+        context = {
+            "env": {},
+            "state_dir": state_dir,
+            "request": {"deployment": "dep_1", "ref": None, "snapshot": "snap_1", "deploying": True},
+        }
+        printed = io.StringIO()
+
+        with contextlib.redirect_stdout(printed):
+            launcher.record_deployment(context, launcher.OUTCOME_READY, source=launcher.SOURCE_SNAPSHOT)
+
+        self.assertEqual(printed.getvalue(), "")
+
+        with open(os.path.join(state_dir, launcher.DEPLOYMENT_STAMP), encoding="utf-8") as stamp:
+            written = json.load(stamp)
+
+        self.assertEqual(written["outcome"], launcher.OUTCOME_READY)
+        self.assertFalse(written["settled"])
+
+        with contextlib.redirect_stdout(printed):
+            launcher.record_deployment(
+                context, launcher.OUTCOME_FAILED, source=launcher.SOURCE_SNAPSHOT, stage="install", detail="nope"
+            )
+
+        self.assertEqual(printed.getvalue(), "serverk: deployment dep_1 failed: install: nope\n")
+
+
+class StartRetryTest(unittest.TestCase):
+    FAILED = {"deployment": "dep_1", "source": "git", "commit": SHA, "outcome": "failed", "stage": "start"}
+
+    def test_claims_a_failed_start_only_while_the_code_on_disk_is_its_own(self):
+        request = {"deploying": False}
+
+        self.assertEqual(launcher.start_retry_of(request, self.FAILED, {"source": "git", "commit": SHA}), self.FAILED)
+        self.assertIsNone(launcher.start_retry_of(request, self.FAILED, {"source": "git", "commit": "f" * 40}))
+        self.assertIsNone(launcher.start_retry_of({"deploying": True}, self.FAILED, {"source": "git", "commit": SHA}))
+        self.assertIsNone(
+            launcher.start_retry_of(request, {**self.FAILED, "stage": "install"}, {"source": "git", "commit": SHA})
+        )
+        self.assertEqual(
+            launcher.start_retry_of(request, {**self.FAILED, "source": "snapshot"}, {"source": "local", "commit": None}),
+            {**self.FAILED, "source": "snapshot"},
+        )
+
+
+class StageFailureTest(unittest.TestCase):
+    def test_names_an_install_the_memory_limit_killed_out_of_memory(self):
+        failure = launcher.stage_failure(launcher.STAGE_INSTALL, launcher.INSTALL_HINT, -9, "Resolved 12 packages")
+
+        self.assertEqual(failure.stage, launcher.STAGE_INSTALL)
+        self.assertEqual(failure.detail, "out-of-memory")
+        self.assertEqual(failure.arabic, launcher.MEMORY_HINT)
+
+    def test_keeps_the_reason_of_an_install_that_exited_137_on_its_own(self):
+        failure = launcher.stage_failure(launcher.STAGE_INSTALL, launcher.INSTALL_HINT, 137, "Killed")
+
+        self.assertEqual(failure.detail, "Killed")
+
+    def test_keeps_the_reason_of_an_install_that_failed_on_its_own(self):
+        failure = launcher.stage_failure(launcher.STAGE_INSTALL, launcher.INSTALL_HINT, 1, "No solution found")
+
+        self.assertEqual(failure.detail, "No solution found")
+        self.assertEqual(failure.english, "install failed: No solution found")
 
 
 if __name__ == "__main__":

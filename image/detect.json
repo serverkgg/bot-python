@@ -1,5 +1,5 @@
 {
-	"version": 1,
+	"version": 2,
 	"procfile": {
 		"file": "Procfile",
 		"line": "^(worker|bot)\\s*:\\s*(.+)$",
@@ -43,6 +43,10 @@
 	},
 	"node": {
 		"manifest": "package.json",
+		"managerField": "packageManager",
+		"berryFile": ".yarnrc.yml",
+		"enginesKey": "node",
+		"buildScript": "build",
 		"startFiles": [
 			"index.js",
 			"src/index.js",
@@ -52,44 +56,125 @@
 		],
 		"lockfiles": [
 			{
+				"file": "pnpm-lock.yaml",
+				"manager": "pnpm"
+			},
+			{
+				"file": "bun.lock",
+				"manager": "bun"
+			},
+			{
+				"file": "bun.lockb",
+				"manager": "bun"
+			},
+			{
+				"file": "yarn.lock",
+				"manager": "yarn"
+			},
+			{
 				"file": "package-lock.json",
 				"manager": "npm"
 			},
 			{
 				"file": "npm-shrinkwrap.json",
 				"manager": "npm"
-			},
-			{
-				"file": "pnpm-lock.yaml",
-				"manager": "pnpm"
-			},
-			{
-				"file": "yarn.lock",
-				"manager": "yarn"
 			}
 		],
 		"installCommands": {
+			"locked": {
+				"npm": [
+					"npm",
+					"ci"
+				],
+				"pnpm": [
+					"corepack",
+					"pnpm",
+					"install",
+					"--frozen-lockfile"
+				],
+				"yarn": [
+					"corepack",
+					"yarn",
+					"install",
+					"--frozen-lockfile"
+				],
+				"yarn-berry": [
+					"corepack",
+					"yarn",
+					"install",
+					"--immutable"
+				],
+				"bun": [
+					"bun",
+					"install",
+					"--frozen-lockfile"
+				]
+			},
+			"unlocked": {
+				"npm": [
+					"npm",
+					"install"
+				],
+				"pnpm": [
+					"corepack",
+					"pnpm",
+					"install"
+				],
+				"yarn": [
+					"corepack",
+					"yarn",
+					"install"
+				],
+				"yarn-berry": [
+					"corepack",
+					"yarn",
+					"install",
+					"--no-immutable"
+				],
+				"bun": [
+					"bun",
+					"install"
+				]
+			}
+		},
+		"runCommands": {
 			"npm": [
 				"npm",
-				"ci"
+				"run"
 			],
 			"pnpm": [
 				"corepack",
 				"pnpm",
-				"install",
-				"--frozen-lockfile"
+				"run"
 			],
 			"yarn": [
 				"corepack",
 				"yarn",
-				"install"
+				"run"
 			],
-			"npm-install": [
-				"npm",
-				"install"
+			"yarn-berry": [
+				"corepack",
+				"yarn",
+				"run"
+			],
+			"bun": [
+				"bun",
+				"run"
 			]
 		},
-		"unlockedManager": "npm-install"
+		"versionFiles": [
+			{
+				"file": ".nvmrc"
+			},
+			{
+				"file": ".node-version"
+			},
+			{
+				"file": ".tool-versions",
+				"tool": "nodejs"
+			}
+		],
+		"defaultVersion": "24"
 	},
 	"python": {
 		"startFiles": [
@@ -105,20 +190,84 @@
 				"manager": "requirements"
 			},
 			{
+				"file": "uv.lock",
+				"manager": "uv"
+			},
+			{
+				"file": "poetry.lock",
+				"manager": "poetry"
+			},
+			{
+				"file": "pdm.lock",
+				"manager": "pdm"
+			},
+			{
+				"file": "Pipfile",
+				"manager": "pipenv"
+			},
+			{
 				"file": "pyproject.toml",
 				"manager": "project"
 			}
 		],
-		"installArguments": {
+		"installCommands": {
 			"requirements": [
+				"uv",
+				"pip",
 				"install",
 				"-r",
 				"requirements.txt"
 			],
+			"uv": [
+				"uv",
+				"sync",
+				"--locked",
+				"--no-dev"
+			],
+			"poetry": [
+				"uv",
+				"pip",
+				"install",
+				"."
+			],
+			"pdm": [
+				"uv",
+				"pip",
+				"install",
+				"."
+			],
+			"pipenv": [
+				"pipenv",
+				"install"
+			],
 			"project": [
+				"uv",
+				"pip",
 				"install",
 				"."
 			]
-		}
+		},
+		"unhonouredManagers": [
+			"poetry",
+			"pdm"
+		],
+		"versionFiles": [
+			{
+				"file": ".python-version"
+			},
+			{
+				"file": "runtime.txt",
+				"prefix": "python-"
+			},
+			{
+				"file": "Pipfile",
+				"key": "python_version"
+			},
+			{
+				"file": ".tool-versions",
+				"tool": "python"
+			}
+		],
+		"defaultVersion": "3.12"
 	}
 }

@@ -2,8 +2,12 @@ import { describe, expect, it } from "bun:test";
 import { BridgeLifecycleSubject } from "@serverkgg/bridge";
 import {
 	BOT_PLATFORM,
+	BotDeploymentOutcome,
+	BotDeploymentSource,
+	BotDeploymentStage,
 	BotPlatform,
 	DEPLOYMENT_ID,
+	DEPLOYMENT_STATE_FILE,
 	GIT_TOKEN,
 	IDENTITY_CACHE_FILE,
 	INSTALL_COMMAND,
@@ -17,6 +21,7 @@ import {
 	REPO_REF,
 	REPO_URL,
 } from "@serverkgg/bridge/bot";
+import { BridgeCrashCause, BridgeCrashPhase, BridgeEventName } from "@serverkgg/bridge/protocol";
 import { STATE_DIR } from "../shared";
 import { fakeContext, SERVER_CODE } from "../testing";
 import { lifecycle } from "./lifecycle";
@@ -144,5 +149,103 @@ describe("learning the bot's name", () => {
 		await lifecycle.onReady?.(context);
 
 		expect(followers).toHaveLength(0);
+	});
+});
+
+const launchedDeployment = async () => {
+	const fake = fakeContext();
+
+	await lifecycle.command(fake.context);
+
+	fake.stored.set(
+		DEPLOYMENT_STATE_FILE,
+		JSON.stringify({
+			deployment: "dep_a1b2c3d4",
+			source: BotDeploymentSource.Snapshot,
+			ref: null,
+			commit: null,
+			snapshot: "snap_1",
+			outcome: BotDeploymentOutcome.Ready,
+			stage: null,
+			detail: null,
+			finishedAt: new Date().toISOString(),
+		}),
+	);
+
+	await lifecycle.onReady?.(fake.context);
+
+	return fake;
+};
+
+const reportOf = (cause: BridgeCrashCause, phase: BridgeCrashPhase) => {
+	return {
+		cause,
+		exitCode: 1,
+		outOfMemory: false,
+		phase,
+		uptimeSeconds: 5,
+		restarting: false,
+		looping: false,
+		restarts: 0,
+		lastLine: null,
+	};
+};
+
+describe("telling the platform how the deployment went", () => {
+	it("says nothing when the launcher hands over and reports ready once the bot is stable", async () => {
+		const { context, emitted } = await launchedDeployment();
+
+		expect(emitted).toEqual([]);
+
+		await lifecycle.onStable?.(context);
+
+		expect(emitted).toEqual([
+			{
+				event: BridgeEventName.ServerUpdated,
+				payload: {
+					kind: "deployment",
+					deployment: "dep_a1b2c3d4",
+					outcome: BotDeploymentOutcome.Ready,
+					commit: null,
+				},
+			},
+		]);
+	});
+
+	it("fails the deployment at the start stage with the cause when the bot exits before it is ready", async () => {
+		const { context, emitted, stored } = await launchedDeployment();
+
+		await lifecycle.onExit?.(context, reportOf(BridgeCrashCause.TokenInvalid, BridgeCrashPhase.Booting));
+
+		expect(emitted).toEqual([
+			{
+				event: BridgeEventName.ServerUpdated,
+				payload: {
+					kind: "deployment",
+					deployment: "dep_a1b2c3d4",
+					outcome: BotDeploymentOutcome.Failed,
+					stage: BotDeploymentStage.Start,
+					detail: BridgeCrashCause.TokenInvalid,
+				},
+			},
+		]);
+		expect(JSON.parse(stored.get(DEPLOYMENT_STATE_FILE) ?? "{}")).toMatchObject({
+			deployment: "dep_a1b2c3d4",
+			outcome: BotDeploymentOutcome.Failed,
+			stage: BotDeploymentStage.Start,
+			detail: BridgeCrashCause.TokenInvalid,
+		});
+	});
+
+	it("leaves a deployment from an earlier launch alone when the bot only restarted", async () => {
+		const { context, emitted, stored } = await launchedDeployment();
+
+		await Bun.sleep(5);
+		await lifecycle.command(context);
+		await lifecycle.onReady?.(context);
+		await lifecycle.onExit?.(context, reportOf(BridgeCrashCause.Unknown, BridgeCrashPhase.Booting));
+
+		expect(emitted).toEqual([]);
+		expect(JSON.parse(stored.get(DEPLOYMENT_STATE_FILE) ?? "{}").outcome).toBe(BotDeploymentOutcome.Ready);
 	});
 });

@@ -70,8 +70,8 @@ files:
       color: "#3776ab"
       restart: true
       note:
-        ar: إذا لم يوجد requirements.txt، نثبّت مشروعك من هنا بـ pip install في كل نشر.
-        en: Without a requirements.txt we install your project from here with pip install on every deploy.
+        ar: إذا لم يوجد requirements.txt ولا ملف قفل ولا Pipfile، نثبّت مشروعك من هنا بـ uv في كل نشر.
+        en: Without a requirements.txt, a lockfile or a Pipfile, we install your project from here with uv on every deploy.
     - match: .env
       label:
         ar: المتغيرات

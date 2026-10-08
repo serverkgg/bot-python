@@ -2,11 +2,14 @@ import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { BridgeKind, BridgeLayout, BridgeStopSignal } from "@serverkgg/bridge";
 import {
+	BOT_CRASH_EVIDENCE,
 	BOT_DEPLOY_MODULE,
 	BOT_IDENTITY_MODULE,
 	BOT_TAB,
 	BotSection,
+	DEPLOYMENT_EVENT_PATTERN,
 	LAUNCHER_RULES,
+	LOGIN_LINE,
 	PYTHON_RULES,
 } from "@serverkgg/bridge/bot";
 import { driver } from "./driver";
@@ -84,6 +87,15 @@ describe("assembling the bot driver", () => {
 		expect(driver.lifecycle.ready?.test(`${LAUNCHER_READY_LINE} now`)).toBe(false);
 		expect(driver.lifecycle.readyTimeoutSeconds).toBe(900);
 		expect(driver.lifecycle.onReady).toBeDefined();
+	});
+
+	it("calls the bot ready after twenty seconds alive or its login line, and names every known failure", () => {
+		expect(driver.lifecycle.graceSeconds).toBe(20);
+		expect(driver.lifecycle.stableLine).toBe(LOGIN_LINE);
+		expect(driver.events?.patterns).toEqual([
+			DEPLOYMENT_EVENT_PATTERN,
+			...BOT_CRASH_EVIDENCE,
+		]);
 	});
 
 	it("stops the bot with SIGTERM at once and kills it after fifteen seconds", () => {

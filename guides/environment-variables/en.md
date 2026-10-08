@@ -37,4 +37,4 @@ We give your bot these ourselves:
 - `SERVERK_BOT` set to `1`, and `SERVERK_SERVER_CODE`, your bot's code.
 - `BOT_PLATFORM`: `discord` or `telegram`.
 
-> [!note] Your variables reach the dependency install too, so if you use a private package index, add `PIP_INDEX_URL` to your variables and mark it sensitive.
+> [!note] Your variables reach the dependency install too, so if you use a private package index, add `UV_DEFAULT_INDEX` to your variables and mark it sensitive. A `Pipfile` takes its index from its own `[[source]]` section instead. If the install command you set runs `pip`, add `PIP_INDEX_URL` instead.

@@ -22,6 +22,7 @@ import {
 	DEPLOY_MARKER as BRIDGE_DEPLOY_MARKER,
 	LAUNCHER_KEYS as BRIDGE_LAUNCHER_KEYS,
 	botDeploymentStateSchema,
+	createBotReadiness,
 	DEPLOYMENT_ID_PATTERN,
 	DEPLOYMENT_LINE,
 	DEPLOYMENT_STATE_FILE,
@@ -37,6 +38,7 @@ import {
 	renderDetectTable,
 	SNAPSHOT_ID_PATTERN,
 } from "@serverkgg/bridge/bot";
+import { BridgeCrashCause, BridgeCrashPhase, BridgeEventName } from "@serverkgg/bridge/protocol";
 import { READY_LINE } from "./lifecycle";
 import { STATE_DIR } from "./shared";
 
@@ -57,6 +59,15 @@ const SHA = "0123456789abcdef0123456789abcdef01234567";
 const REMOTE = "https://example.test/bots/sample";
 
 const RESUME_KEY = "SERVERK_LAUNCH_RESUME";
+
+const INSTALL_ONLY_KEYS = [
+	"CI",
+	"PIPENV_DONT_LOAD_ENV",
+	"PIPENV_CACHE_DIR",
+	"UV_CACHE_DIR",
+	"UV_PYTHON_INSTALL_DIR",
+	"UV_MANAGED_PYTHON",
+];
 
 const NPM_404_TRANSCRIPT = [
 	"npm error code E404",
@@ -85,6 +96,17 @@ const PIP_BUILD_TRANSCRIPT = [
 	"note: This is an issue with the package mentioned above, not pip.",
 	"hint: See above for details.",
 ];
+
+const UV_NO_SOLUTION_TRANSCRIPT = [
+	"Using Python 3.12.3 environment at: .venv",
+	"  × No solution found when resolving dependencies:",
+	"  ╰─▶ Because serverk-no-such-package-e404-proof was not found in the package",
+	"      registry and you require serverk-no-such-package-e404-proof==1.0, we can",
+	"      conclude that your requirements are unsatisfiable.",
+];
+
+const UV_NO_SOLUTION_DETAIL =
+	"× No solution found when resolving dependencies: Because serverk-no-such-package-e404-proof was not found in the package registry and you require serverk-no-such-package-e404-proof==1.0, we can conclude that your requirements are unsatisfiable.";
 
 const transcriptScript = (lines: string[]) => {
 	return `#!/bin/sh\ncat >&2 <<'TRANSCRIPT'\n${lines.join("\n")}\nTRANSCRIPT\nexit 1\n`;
@@ -444,13 +466,126 @@ describe("the templates as the platform inspects them", () => {
 				runtime: BotRuntime.Python,
 				package: "bot-python",
 				install: {
-					command: "pip install -r requirements.txt",
+					command: "uv pip install -r requirements.txt",
 				},
 				start: {
 					command: "python main.py",
 				},
 				warnings: [],
 				...wanted,
+			});
+		}
+	});
+});
+
+const LAYOUTS: Record<string, string>[] = [
+	{
+		"main.py": "run()",
+		Procfile: "worker: python -m bot\n",
+		"requirements.txt": "discord.py==2.7.1\n",
+	},
+	{
+		"mybot/__main__.py": "run()",
+		"requirements.txt": "discord.py==2.7.1\n",
+	},
+	{
+		"tests/__main__.py": "run()",
+		"venv/__main__.py": "run()",
+		"mybot/__main__.py": "run()",
+		"pyproject.toml": '[project]\nname = "bot"\nversion = "1"\ndependencies = ["discord.py==2.7.1"]\n',
+		"poetry.lock": "# lock\n",
+	},
+	{
+		"bot.py": "run()",
+		"pyproject.toml": '[project]\nname = "bot"\nversion = "1"\ndependencies = ["aiogram==3.22.0"]\n',
+		"uv.lock": "version = 1\n",
+		".python-version": "3.11.4\n",
+	},
+	{
+		"app.py": "run()",
+		Pipfile: '[packages]\ndiscord-py = "==2.7.1"\n\n[requires]\npython_version = "3.10"\n',
+	},
+	{
+		"main.py": "run()",
+		"requirements.txt": "discord.py==2.7.1\n",
+		"runtime.txt": "python-3.9.18\n",
+	},
+	{
+		"src/main.py": "run()",
+		"requirements.txt": "discord.py==2.7.1\n",
+		".tool-versions": "nodejs 24\npython 3.13.1\n",
+	},
+];
+
+describe("deciding the way the panel shows it", () => {
+	it("starts, installs and picks the Python version the way the bridge detects them", () => {
+		const root = mkdtempSync(join(tmpdir(), "bot-python-layouts-"));
+
+		try {
+			const dirs = LAYOUTS.map((layout, index) => {
+				const dir = join(root, String(index));
+
+				for (const [file, content] of Object.entries(layout)) {
+					mkdirSync(join(dir, file, ".."), {
+						recursive: true,
+					});
+					writeFileSync(join(dir, file), content);
+				}
+
+				return dir;
+			});
+
+			const answer = python(
+				[
+					"import json, os, launcher",
+					`dirs = ${JSON.stringify(dirs)}`,
+					"table = launcher.BUILT_IN_TABLE",
+					"def decide(folder):",
+					"    read = lambda name: launcher.read_text(os.path.join(folder, name))",
+					"    plan = launcher.detect_manager({entry['file'] for entry in table['python']['manifests'] if read(entry['file']) is not None})",
+					"    argv = launcher.resolve_start(folder, {}, table)['argv']",
+					"    start = ' '.join(['python', *argv[2:]]) if argv[0] == launcher.VENV_PYTHON else argv[2].removeprefix('exec ')",
+					"    install = ' '.join(table['python']['installCommands'][plan['manager']])",
+					"    return {'start': start, 'install': install, 'version': launcher.python_version_of(read)}",
+					"print(json.dumps([decide(folder) for folder in dirs]))",
+				].join("\n"),
+			);
+
+			const detected = LAYOUTS.map((layout) => {
+				const files = Object.keys(layout).map((path) => ({
+					path,
+				}));
+				const result = detect({
+					files,
+					contents: Object.fromEntries(
+						detectWantedFiles(files).map((path) => [
+							path,
+							layout[path] ?? "",
+						]),
+					),
+				});
+
+				return {
+					start: result.start?.command ?? null,
+					install: result.install?.command ?? null,
+					version: result.pythonVersion,
+				};
+			});
+
+			expect(answer).toEqual(detected);
+			expect(detected.map((entry) => entry.start)).toEqual([
+				"python -m bot",
+				"python -m mybot",
+				"python -m mybot",
+				"python bot.py",
+				"python app.py",
+				"python main.py",
+				"python src/main.py",
+			]);
+		} finally {
+			rmSync(root, {
+				force: true,
+				recursive: true,
 			});
 		}
 	});
@@ -584,12 +719,17 @@ describe("running the launcher", () => {
 		});
 
 		expect(first.code).toBe(0);
-		expect(first.lines.slice(-4)).toEqual([
-			"serverk: deployment dep_1 ready",
+		expect(first.lines.slice(-3)).toEqual([
 			"serverk: start command: sh -c exec echo the bot ran",
 			"serverk: bot process starting",
 			"the bot ran",
 		]);
+		expect(first.lines.some((line) => DEPLOYMENT_LINE.test(line))).toBe(false);
+		expect(stamp()).toMatchObject({
+			deployment: "dep_1",
+			outcome: "ready",
+			settled: false,
+		});
 		expect(readFileSync(join(app, ".env.example"), "utf8")).toBe("TELEGRAM_TOKEN=");
 
 		writeFileSync(join(app, "data.db"), "runtime");
@@ -813,7 +953,11 @@ describe("running the launcher", () => {
 		});
 
 		expect(code).toBe(0);
-		expect(lines).toContain(`serverk: deployment dep_1 ready at ${sha.slice(0, 12)}`);
+		expect(stamp()).toMatchObject({
+			deployment: "dep_1",
+			outcome: "ready",
+			commit: sha,
+		});
 		expect(lines).toContain("serverk: start command: .venv/bin/python -u main.py");
 		expect(lines.at(-1)).toBe(`cwd ${realpathSync(join(app, "app"))}`);
 		expect(readFileSync(join(app, "README.md"), "utf8")).toBe("sibling");
@@ -911,6 +1055,19 @@ describe("running the launcher", () => {
 
 		return broken;
 	};
+
+	it("keeps the install-only variables away from the bot and out of the image", () => {
+		const { code, lines } = launch({
+			SERVERK_INSTALL_COMMAND: "sh -c 'echo install CI=$CI PIPENV_DONT_LOAD_ENV=$PIPENV_DONT_LOAD_ENV'",
+			SERVERK_START_COMMAND: "env",
+		});
+		const dockerfile = readFileSync(join(IMAGE, "Dockerfile"), "utf8");
+
+		expect(code).toBe(0);
+		expect(lines).toContain("install CI=true PIPENV_DONT_LOAD_ENV=1");
+		expect(lines.filter((line) => INSTALL_ONLY_KEYS.some((key) => line.startsWith(`${key}=`)))).toEqual([]);
+		expect(INSTALL_ONLY_KEYS.filter((key) => dockerfile.includes(key))).toEqual([]);
+	});
 
 	it("runs a start command that sets a variable before the program", () => {
 		const { code, lines } = launch({
@@ -1137,73 +1294,195 @@ describe("running the launcher", () => {
 
 		expect(code).toBe(0);
 		expect(lines).toContain("parent-token-0");
-		expect(lines).toContain(`serverk: deployment dep_1 ready at ${remote.sha.slice(0, 12)}`);
+		expect(stamp()).toMatchObject({
+			deployment: "dep_1",
+			outcome: "ready",
+			commit: remote.sha,
+		});
 		expect(lines.at(-1)).toBe("bot none");
 	});
 
-	const fakePip = () => {
-		const python = join(app, ".venv", "bin", "python");
+	const fakeUv = (script = '#!/bin/sh\necho "fake uv $* in $VIRTUAL_ENV"\nexit 0\n') => {
+		const tools = join(root, "tools");
 
-		rmSync(python, {
-			force: true,
+		mkdirSync(tools, {
+			recursive: true,
 		});
-		writeFileSync(python, '#!/bin/sh\necho "fake python $*"\nexit 0\n', {
+		writeFileSync(join(tools, "uv"), script, {
 			mode: 0o755,
 		});
+
+		return `${tools}:${process.env.PATH ?? "/usr/bin:/bin"}`;
 	};
 
-	const deployWithPip = (name: string, files: Record<string, string>) => {
+	const deployWithUv = (name: string, files: Record<string, string>) => {
 		place(zipOf(name, files), name);
 
 		return launch({
+			PATH: fakeUv(),
 			SERVERK_SNAPSHOT_ID: name,
 			SERVERK_DEPLOYMENT_ID: `dep_${name}`,
 		});
 	};
 
 	it("drops a shipped requirements file with its snapshot and installs the next snapshot from its own manifest", () => {
-		fakePip();
-
-		const first = deployWithPip("snap_a", {
+		const first = deployWithUv("snap_a", {
 			"main.py": "run()",
 			"requirements.txt": "discord.py==2.7.1\n",
 		});
 
 		expect(first.code).toBe(0);
-		expect(first.lines).toContain("serverk: installing dependencies: pip install -r requirements.txt");
+		expect(first.lines).toContain("serverk: installing dependencies: uv pip install -r requirements.txt");
+		expect(first.lines).toContain(`fake uv pip install -r requirements.txt in ${join(app, ".venv")}`);
 
-		const second = deployWithPip("snap_b", {
+		const second = deployWithUv("snap_b", {
 			"main.py": "run()",
 			"pyproject.toml": '[project]\nname = "b"\nversion = "1"\n',
 		});
 
 		expect(second.code).toBe(0);
-		expect(second.lines).toContain("serverk: installing dependencies: pip install .");
-		expect(second.lines).toContain("serverk: deployment dep_snap_b ready");
+		expect(second.lines).toContain("serverk: installing dependencies: uv pip install .");
+		expect(stamp()).toMatchObject({
+			deployment: "dep_snap_b",
+			outcome: "ready",
+		});
 		expect(second.lines.at(-1)).toBe("the bot ran");
 	});
 
 	it("ignores a requirements file the snapshot does not carry when it picks how to install", () => {
-		fakePip();
-
 		const project = {
 			"main.py": "run()",
 			"pyproject.toml": '[project]\nname = "b"\nversion = "1"\n',
 		};
 
-		expect(deployWithPip("snap_a", project).code).toBe(0);
+		expect(deployWithUv("snap_a", project).code).toBe(0);
 
 		writeFileSync(join(app, "requirements.txt"), "left==1.0\n");
 
-		const second = deployWithPip("snap_b", {
+		const second = deployWithUv("snap_b", {
 			"main.py": "run_again()",
 			"pyproject.toml": '[project]\nname = "b"\nversion = "2"\n',
 		});
 
 		expect(second.code).toBe(0);
-		expect(second.lines).toContain("serverk: installing dependencies: pip install .");
-		expect(second.lines).not.toContain("serverk: installing dependencies: pip install -r requirements.txt");
+		expect(second.lines).toContain("serverk: installing dependencies: uv pip install .");
+		expect(second.lines).not.toContain("serverk: installing dependencies: uv pip install -r requirements.txt");
 		expect(readFileSync(join(app, "requirements.txt"), "utf8")).toBe("left==1.0\n");
+	});
+
+	it("fails the install stage with uv's reason, not the last line it wrapped", () => {
+		writeFileSync(join(app, "requirements.txt"), "serverk-no-such-package-e404-proof==1.0\n");
+
+		const { code, lines } = launch({
+			PATH: fakeUv(transcriptScript(UV_NO_SOLUTION_TRANSCRIPT)),
+			SERVERK_DEPLOYMENT_ID: "dep_uv",
+		});
+
+		expect(code).toBe(1);
+		expect(lines.at(-1)).toBe(`serverk: deployment dep_uv failed: install: ${UV_NO_SOLUTION_DETAIL.slice(0, 200)}`);
+	});
+
+	it("a start after a boot failure reports the same deployment ready when the bot survives", async () => {
+		const emitted: {
+			event: string;
+			payload: unknown;
+		}[] = [];
+		const bridge = {
+			files: {
+				async exists(path: string) {
+					return existsSync(join(app, path));
+				},
+				async read(path: string) {
+					return readFileSync(join(app, path), "utf8");
+				},
+				async write(path: string, content: string) {
+					writeFileSync(join(app, path), content);
+				},
+			},
+			log: Object.assign(() => {}, {
+				warn: () => {},
+				error: () => {},
+			}),
+			emit(event: string, payload: unknown) {
+				emitted.push({
+					event,
+					payload,
+				});
+			},
+		} as unknown as Parameters<ReturnType<typeof createBotReadiness>["ready"]>[0];
+		const readiness = createBotReadiness();
+
+		place(
+			zipOf("one", {
+				"main.py": "run()",
+			}),
+			"snap_1",
+		);
+		readiness.launching();
+		launch({
+			SERVERK_SNAPSHOT_ID: "snap_1",
+			SERVERK_DEPLOYMENT_ID: "dep_1",
+		});
+		await readiness.ready(bridge);
+		await readiness.exit(bridge, {
+			cause: BridgeCrashCause.TokenInvalid,
+			exitCode: 1,
+			outOfMemory: false,
+			phase: BridgeCrashPhase.Booting,
+			uptimeSeconds: 2,
+			restarting: false,
+			looping: false,
+			restarts: 0,
+			lastLine: null,
+		});
+
+		expect(stamp()).toMatchObject({
+			deployment: "dep_1",
+			outcome: "failed",
+			stage: "start",
+		});
+
+		readiness.launching();
+
+		const again = launch({});
+
+		await readiness.ready(bridge);
+		await readiness.stable(bridge);
+
+		expect(again.code).toBe(0);
+		expect(again.lines.at(-1)).toBe("the bot ran");
+		expect(emitted.at(-1)).toEqual({
+			event: BridgeEventName.ServerUpdated,
+			payload: {
+				kind: "deployment",
+				deployment: "dep_1",
+				outcome: "ready",
+				commit: null,
+			},
+		});
+		expect(stamp()).toMatchObject({
+			deployment: "dep_1",
+			outcome: "ready",
+			settled: true,
+		});
+	});
+
+	it("fails a deployment whose install the memory limit killed with out-of-memory, not its last line", () => {
+		writeFileSync(join(app, "requirements.txt"), "discord.py==2.4.0\n");
+
+		const { code, lines } = launch({
+			PATH: fakeUv("#!/bin/sh\necho Resolved 12 packages\nkill -9 $$\n"),
+			SERVERK_DEPLOYMENT_ID: "dep_oom",
+		});
+
+		expect(code).toBe(1);
+		expect(lines.at(-1)).toBe("serverk: deployment dep_oom failed: install: out-of-memory");
+		expect(stamp()).toMatchObject({
+			deployment: "dep_oom",
+			outcome: "failed",
+			stage: "install",
+			detail: BridgeCrashCause.OutOfMemory,
+		});
 	});
 
 	it("fails the install stage with npm's reason, not the path of its debug log", () => {
@@ -1225,17 +1504,14 @@ describe("running the launcher", () => {
 	});
 
 	it("fails the install stage with pip's summary, not its closing hint", () => {
-		const python = join(app, ".venv", "bin", "python");
+		const script = join(root, "pip-build.sh");
 
-		rmSync(python, {
-			force: true,
-		});
-		writeFileSync(python, transcriptScript(PIP_BUILD_TRANSCRIPT), {
+		writeFileSync(script, transcriptScript(PIP_BUILD_TRANSCRIPT), {
 			mode: 0o755,
 		});
-		writeFileSync(join(app, "requirements.txt"), "broken-package==1.0\n");
 
 		const { code, lines } = launch({
+			SERVERK_INSTALL_COMMAND: `sh ${script}`,
 			SERVERK_DEPLOYMENT_ID: "dep_pip",
 		});
 

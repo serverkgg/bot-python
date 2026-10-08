@@ -4,6 +4,7 @@ import os
 import platform
 import re
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -28,7 +29,7 @@ GIT_ASKPASS = "/serverk/git-askpass"
 
 DETECT_TABLE_PATH = "/serverk/detect.json"
 
-DETECT_TABLE_VERSION = 1
+DETECT_TABLE_VERSION = 2
 
 REPO_URL_PATTERN = re.compile(r"^https://[^\s@/]+/\S+$")
 
@@ -99,18 +100,75 @@ BUILT_IN_TABLE = {
         "startFiles": ["main.py", "bot.py", "app.py", "src/main.py", "src/bot.py"],
         "manifests": [
             {"file": "requirements.txt", "manager": "requirements"},
+            {"file": "uv.lock", "manager": "uv"},
+            {"file": "poetry.lock", "manager": "poetry"},
+            {"file": "pdm.lock", "manager": "pdm"},
+            {"file": "Pipfile", "manager": "pipenv"},
             {"file": "pyproject.toml", "manager": "project"},
         ],
-        "installArguments": {
-            "requirements": ["install", "-r", "requirements.txt"],
-            "project": ["install", "."],
+        "installCommands": {
+            "requirements": ["uv", "pip", "install", "-r", "requirements.txt"],
+            "uv": ["uv", "sync", "--locked", "--no-dev"],
+            "poetry": ["uv", "pip", "install", "."],
+            "pdm": ["uv", "pip", "install", "."],
+            "pipenv": ["pipenv", "install"],
+            "project": ["uv", "pip", "install", "."],
         },
+        "unhonouredManagers": ["poetry", "pdm"],
+        "versionFiles": [
+            {"file": ".python-version"},
+            {"file": "runtime.txt", "prefix": "python-"},
+            {"file": "Pipfile", "key": "python_version"},
+            {"file": ".tool-versions", "tool": "python"},
+        ],
+        "defaultVersion": "3.12",
     },
 }
+
+TOOL_UV = "uv"
+
+TOOL_PIPENV = "pipenv"
+
+INSTALL_TOOLS = frozenset((TOOL_UV, TOOL_PIPENV))
+
+UV_SYNC = (TOOL_UV, "sync")
+
+PYPROJECT_FILE = "pyproject.toml"
+
+MANIFEST_COMPANIONS = {
+    "uv.lock": PYPROJECT_FILE,
+    "poetry.lock": PYPROJECT_FILE,
+    "pdm.lock": PYPROJECT_FILE,
+    "Pipfile": "Pipfile.lock",
+}
+
+PACKAGE_MAIN = "__main__.py"
+
+PACKAGE_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+SKIPPED_FOLDERS = frozenset(("node_modules", ".venv", "venv", "__pycache__", ".git", ".serverk", "site-packages"))
+
+NOT_A_BOT_PACKAGE = frozenset(("tests", "test", "docs", "examples", "scripts"))
+
+VERSION_NUMBER = re.compile(r"^v?([0-9]+(?:\.[0-9]+)*)")
+
+PYTHON_VERSION_PARTS = 2
+
+UV_CACHE_DIR = ("cache", "uv")
+
+UV_PYTHON_INSTALL_DIR = ("cache", "python")
+
+PIPENV_CACHE_DIR = ("cache", "pipenv")
+
+NO_MANIFEST_LINE = "no requirements.txt, Pipfile or pyproject.toml, skipping dependencies"
 
 VENV = ".venv"
 
 VENV_PYTHON = ".venv/bin/python"
+
+VENV_CONFIG = "pyvenv.cfg"
+
+VENV_VERSION_KEYS = ("version", "version_info")
 
 DEPLOY_MARKER = "deploy-requested"
 
@@ -238,9 +296,13 @@ STATE_TRACKED = "repository tracks .serverk"
 
 JS_WHITESPACE = "\t\n\v\f\r                  　﻿"
 
-JS_SPACE = re.compile("[" + re.escape(JS_WHITESPACE) + "]+")
+JS_SPACE_CHARS = re.escape(JS_WHITESPACE)
+
+JS_SPACE = re.compile(f"[{JS_SPACE_CHARS}]+")
 
 DETAIL_LIMIT = 200
+
+OUT_OF_MEMORY_DETAIL = "out-of-memory"
 
 COMMIT_LENGTH = 12
 
@@ -270,6 +332,8 @@ INSTALL_HINT = "تعذّر تثبيت مكتبات بوتك. راجع السطو
 
 START_HINT = "لم نجد طريقة لتشغيل بوتك. أضف ملف main.py أو bot.py، أو اضبط أمر التشغيل من إعدادات البوت."
 
+MEMORY_HINT = "نفدت الرام أثناء تثبيت مكتبات بوتك، فتوقف التثبيت. ارفع الباقة للحصول على رام أكثر، ثم انشر من جديد."
+
 
 class LaunchFailure(Exception):
     def __init__(self, stage, arabic, english, detail, code=EXIT_FAILURE):
@@ -279,6 +343,19 @@ class LaunchFailure(Exception):
         self.english = english
         self.detail = detail
         self.code = code
+
+
+def killed(code):
+    return code == -signal.SIGKILL
+
+
+def stage_failure(stage, hint, code, detail):
+    if killed(code):
+        return LaunchFailure(
+            stage, MEMORY_HINT, f"{stage} failed: it ran out of memory and was stopped", OUT_OF_MEMORY_DETAIL
+        )
+
+    return LaunchFailure(stage, hint, f"{stage} failed: {detail}", detail)
 
 
 class LaunchExit(Exception):
@@ -427,32 +504,86 @@ def serverk_json_rules_of(rules):
     }
 
 
+def install_command_of(value):
+    command = string_list(value)
+
+    return command if command and all(command) and command[0] in INSTALL_TOOLS else None
+
+
+def version_file_of(entry):
+    if not isinstance(entry, dict) or not isinstance(entry.get("file"), str):
+        return None
+
+    spec = {"file": entry["file"]}
+
+    for field in ("tool", "prefix", "key"):
+        if field not in entry:
+            continue
+
+        if not isinstance(entry[field], str):
+            return None
+
+        spec[field] = entry[field]
+
+    return spec if "key" not in spec or compiles(spec["key"]) else None
+
+
+def python_rules_of(rules):
+    if not isinstance(rules, dict):
+        return None
+
+    manifests = rules.get("manifests")
+    commands = rules.get("installCommands")
+    version_files = rules.get("versionFiles")
+
+    if (
+        not string_list(rules.get("startFiles"))
+        or not isinstance(manifests, list)
+        or not manifests
+        or not all(
+            isinstance(entry, dict) and isinstance(entry.get("file"), str) and isinstance(entry.get("manager"), str)
+            for entry in manifests
+        )
+        or not isinstance(commands, dict)
+        or not all(install_command_of(commands.get(entry["manager"])) for entry in manifests)
+        or string_list(rules.get("unhonouredManagers")) is None
+        or not isinstance(version_files, list)
+        or not isinstance(rules.get("defaultVersion"), str)
+    ):
+        return None
+
+    specs = [version_file_of(entry) for entry in version_files]
+
+    if any(spec is None for spec in specs):
+        return None
+
+    return {
+        "startFiles": rules["startFiles"],
+        "manifests": [{"file": entry["file"], "manager": entry["manager"]} for entry in manifests],
+        "installCommands": {entry["manager"]: commands[entry["manager"]] for entry in manifests},
+        "unhonouredManagers": rules["unhonouredManagers"],
+        "versionFiles": specs,
+        "defaultVersion": rules["defaultVersion"],
+    }
+
+
 def table_of(raw):
     table = parse_object(raw)
 
     if not table or table.get("version") != DETECT_TABLE_VERSION:
         return None
 
-    python = table.get("python")
+    python = python_rules_of(table.get("python"))
     procfile = table.get("procfile")
     serverk_json = serverk_json_rules_of(table.get("serverkJson"))
 
-    if not isinstance(python, dict) or not isinstance(procfile, dict) or serverk_json is None:
-        return None
-
-    manifests = [
-        entry
-        for entry in python.get("manifests") or []
-        if isinstance(entry, dict) and isinstance(entry.get("file"), str) and isinstance(entry.get("manager"), str)
-    ]
-    arguments = python.get("installArguments") if isinstance(python.get("installArguments"), dict) else {}
-
     if (
-        not string_list(python.get("startFiles"))
-        or not manifests
-        or not all(string_list(arguments.get(entry["manager"])) for entry in manifests)
+        python is None
+        or serverk_json is None
+        or not isinstance(procfile, dict)
         or not isinstance(procfile.get("file"), str)
         or not isinstance(procfile.get("line"), str)
+        or not compiles(procfile["line"])
         or not string_list(procfile.get("processes"))
     ):
         return None
@@ -461,7 +592,7 @@ def table_of(raw):
         "version": DETECT_TABLE_VERSION,
         "procfile": {"file": procfile["file"], "line": procfile["line"], "processes": procfile["processes"]},
         "serverkJson": serverk_json,
-        "python": {"startFiles": python["startFiles"], "manifests": manifests, "installArguments": arguments},
+        "python": python,
     }
 
 
@@ -564,11 +695,11 @@ def procfile_command(content, table=BUILT_IN_TABLE):
     pattern = re.compile(table["procfile"]["line"])
     entries = {}
 
-    for line in content.splitlines():
-        match = pattern.match(line.strip())
+    for line in content.split("\n"):
+        match = pattern.match(line.strip(JS_WHITESPACE))
 
         if match and match.group(1) not in entries:
-            entries[match.group(1)] = match.group(2).strip()
+            entries[match.group(1)] = match.group(2).strip(JS_WHITESPACE)
 
     for process in table["procfile"]["processes"]:
         if entries.get(process):
@@ -651,7 +782,19 @@ def serverk_json_of(raw, table=BUILT_IN_TABLE):
     return {"start": start, "install": install}
 
 
-def detect_start(files, start_command=None, procfile=None, table=BUILT_IN_TABLE, serverk_json=None):
+def bot_package_of(packages):
+    names = sorted(
+        {
+            name
+            for name in packages
+            if PACKAGE_NAME_PATTERN.fullmatch(name) and name not in SKIPPED_FOLDERS and name not in NOT_A_BOT_PACKAGE
+        }
+    )
+
+    return names[0] if len(names) == 1 else None
+
+
+def detect_start(files, start_command=None, procfile=None, table=BUILT_IN_TABLE, serverk_json=None, packages=()):
     command = (start_command or "").strip()
 
     if command:
@@ -662,16 +805,79 @@ def detect_start(files, start_command=None, procfile=None, table=BUILT_IN_TABLE,
     if declared:
         return {"source": "serverk-json", "argv": shell_command(declared)}
 
-    for candidate in table["python"]["startFiles"]:
-        if candidate in files:
-            return {"source": "file", "argv": [VENV_PYTHON, "-u", candidate]}
-
     declared = procfile_command(procfile, table) if procfile else None
 
     if declared:
         return {"source": "procfile", "argv": shell_command(declared)}
 
+    for candidate in table["python"]["startFiles"]:
+        if candidate in files:
+            return {"source": "file", "argv": [VENV_PYTHON, "-u", candidate]}
+
+    package = bot_package_of(packages)
+
+    if package:
+        return {"source": "package", "argv": [VENV_PYTHON, "-u", "-m", package]}
+
     return None
+
+
+def version_from_file(content, spec):
+    for raw in content.split("\n"):
+        line = raw.strip(JS_WHITESPACE)
+
+        if not line or line.startswith("#"):
+            continue
+
+        if "tool" in spec:
+            words = JS_SPACE.split(line)
+
+            if words[0] != spec["tool"]:
+                continue
+
+            line = words[1] if len(words) > 1 else ""
+
+        if "key" in spec:
+            match = re.match(f'^{spec["key"]}[{JS_SPACE_CHARS}]*=[{JS_SPACE_CHARS}]*"?([^"{JS_SPACE_CHARS}]+)', line)
+
+            if not match:
+                continue
+
+            line = match.group(1)
+
+        if "prefix" in spec:
+            if not line.startswith(spec["prefix"]):
+                return None
+
+            line = line[len(spec["prefix"]) :]
+
+        match = VERSION_NUMBER.match(line)
+
+        return match.group(1) if match else None
+
+    return None
+
+
+def python_version_of(read, table=BUILT_IN_TABLE):
+    for spec in table["python"]["versionFiles"]:
+        content = read(spec["file"])
+
+        if content is None:
+            continue
+
+        version = version_from_file(content, spec)
+
+        if version is not None:
+            return ".".join(version.split(".")[:PYTHON_VERSION_PARTS])
+
+    return None
+
+
+def managed_python_of(requested, running):
+    if requested is None or running == requested or running.startswith(f"{requested}."):
+        return None
+
+    return requested
 
 
 def detect_manager(files, table=BUILT_IN_TABLE):
@@ -713,6 +919,38 @@ def parse_marker(raw):
         "snapshot": valid(marker.get("snapshot"), ID_PATTERN),
         "reinstall": marker.get("reinstall") is True,
     }
+
+
+def start_retry_of(request, stamp, synced):
+    if (
+        request["deploying"]
+        or not isinstance(stamp, dict)
+        or stamp.get("outcome") != OUTCOME_FAILED
+        or stamp.get("stage") != STAGE_START
+        or not isinstance(stamp.get("deployment"), str)
+    ):
+        return None
+
+    synced = synced or {}
+
+    if stamp.get("source") == SOURCE_GIT:
+        return stamp if synced.get("source") == SOURCE_GIT and synced.get("commit") == stamp.get("commit") else None
+
+    return stamp if synced.get("source") == SOURCE_LOCAL else None
+
+
+def retry_start(context):
+    stamp_path = os.path.join(context["state_dir"], DEPLOYMENT_STAMP)
+    retry = start_retry_of(context["request"], read_json(stamp_path), context.get("synced"))
+
+    if retry is None:
+        return
+
+    write_json(
+        stamp_path,
+        {**retry, "outcome": OUTCOME_READY, "stage": None, "detail": None, "finishedAt": now_iso(), "settled": False},
+    )
+    say(f"starting deployment {retry['deployment']} again, it goes live once the bot proves itself")
 
 
 def resolve_request(env, marker, legacy_reinstall, stamp):
@@ -781,6 +1019,10 @@ NPM_PREFIX = re.compile(r"npm (?:error|ERR!) ")
 
 PIP_ERROR = re.compile(r"ERROR: \S")
 
+UV_HEADLINE = re.compile(r"× \S")
+
+UV_CAUSE = re.compile(r"[├╰]─▶ (.+)")
+
 
 class DetailPicker:
     def __init__(self):
@@ -789,9 +1031,38 @@ class DetailPicker:
         self.described = None
         self.pip_error = None
         self.last = None
+        self.headline = None
+        self.uv = None
+        self.continuing = False
+
+    def read_uv(self, text):
+        cause = UV_CAUSE.match(text)
+
+        if cause and self.uv is None and self.headline is not None:
+            self.uv = f"{self.headline.rstrip(':')}: {cause.group(1)}"
+            self.continuing = True
+            return True
+
+        if (
+            self.continuing
+            and text
+            and not cause
+            and not UV_HEADLINE.match(text)
+            and not any(pattern.match(text) for pattern in NOISE_PREFIXES)
+        ):
+            self.uv = f"{self.uv} {text}"
+            return True
+
+        self.continuing = False
+        self.headline = text if UV_HEADLINE.match(text) else None
+
+        return False
 
     def add(self, line):
         text = line.strip()
+
+        if self.read_uv(text):
+            return
 
         if (
             not text
@@ -819,7 +1090,7 @@ class DetailPicker:
         if self.code is not None:
             return self.code if self.reason is None else f"{self.code}: {self.reason}"
 
-        return self.described or self.pip_error or self.last
+        return self.described or self.uv or self.pip_error or self.last
 
 
 def failure_detail(lines):
@@ -867,6 +1138,7 @@ def run(argv, cwd, env, secret=None, echo=True, capture=False):
         if shown.strip():
             last = shown.strip()
 
+    child.stdout.close()
     code = child.wait()
     detail = picker.pick() or f"{argv[0]} exited with code {code}"
 
@@ -1529,6 +1801,12 @@ def tool_environment(env, state_dir):
     return {
         **bot_environment(env),
         "PIP_CACHE_DIR": env.get("PIP_CACHE_DIR") or os.path.join(state_dir, "cache", "pip"),
+        "UV_CACHE_DIR": env.get("UV_CACHE_DIR") or os.path.join(state_dir, *UV_CACHE_DIR),
+        "UV_PYTHON_INSTALL_DIR": env.get("UV_PYTHON_INSTALL_DIR") or os.path.join(state_dir, *UV_PYTHON_INSTALL_DIR),
+        "PIPENV_CACHE_DIR": env.get("PIPENV_CACHE_DIR") or os.path.join(state_dir, *PIPENV_CACHE_DIR),
+        "PIPENV_DONT_LOAD_ENV": "1",
+        "UV_MANAGED_PYTHON": "1",
+        "CI": "true",
         "PIP_DISABLE_PIP_VERSION_CHECK": "1",
         "PIP_NO_INPUT": "1",
         "PIP_PROGRESS_BAR": "off",
@@ -1547,7 +1825,29 @@ def venv_environment(env, app_dir):
     }
 
 
-def ensure_venv(project_dir, env, rebuild):
+def minor_of(version):
+    return ".".join(version.split(".")[:PYTHON_VERSION_PARTS])
+
+
+def venv_version_of(project_dir):
+    for line in (read_text(os.path.join(project_dir, VENV, VENV_CONFIG)) or "").splitlines():
+        key, separator, value = line.partition("=")
+        match = VERSION_NUMBER.match(value.strip())
+
+        if separator and key.strip() in VENV_VERSION_KEYS and match:
+            return minor_of(match.group(1))
+
+    return None
+
+
+def venv_argv(venv_dir, python):
+    if python is None:
+        return [sys.executable, "-I", "-m", "venv", venv_dir]
+
+    return [TOOL_UV, "venv", "--seed", "--managed-python", "--python", python, venv_dir]
+
+
+def ensure_venv(project_dir, env, rebuild, python=None):
     venv_dir = os.path.join(project_dir, VENV)
 
     if rebuild:
@@ -1556,12 +1856,16 @@ def ensure_venv(project_dir, env, rebuild):
     if os.path.isfile(os.path.join(project_dir, VENV_PYTHON)):
         return False
 
-    say(f"creating {VENV} with Python {platform.python_version()}")
+    if python is None:
+        say(f"creating {VENV} with Python {platform.python_version()}")
+    else:
+        shutil.rmtree(venv_dir, ignore_errors=True)
+        say(f"creating {VENV} with Python {python} through uv")
 
-    code, detail, _ = run([sys.executable, "-I", "-m", "venv", venv_dir], project_dir, env)
+    code, detail, _ = run(venv_argv(venv_dir, python), project_dir, env)
 
     if code != 0:
-        raise LaunchFailure(STAGE_INSTALL, INSTALL_HINT, f"install failed: {detail}", detail)
+        raise stage_failure(STAGE_INSTALL, INSTALL_HINT, code, detail)
 
     return True
 
@@ -1605,6 +1909,25 @@ def carried_by(listing, prefix):
     return lambda name: listing is None or prefix is None or f"{prefix}{name}" in listing
 
 
+def dependency_files(plan):
+    if plan is None:
+        return []
+
+    companion = MANIFEST_COMPANIONS.get(plan["manifest"])
+
+    return [plan["manifest"], companion] if companion else [plan["manifest"]]
+
+
+def install_run_of(command, project_dir, env):
+    venv_dir = os.path.join(project_dir, VENV)
+    tool_env = {**env, "VIRTUAL_ENV": venv_dir}
+
+    if command[0] == TOOL_UV:
+        tool_env["UV_PROJECT_ENVIRONMENT"] = venv_dir
+
+    return list(command), tool_env
+
+
 def install_dependencies(context, reinstall, require_manifest):
     project_dir = context["project_dir"]
     state_dir = context["state_dir"]
@@ -1621,33 +1944,47 @@ def install_dependencies(context, reinstall, require_manifest):
     plan = detect_manager(present, table)
 
     if plan is None and install_command is None and require_manifest:
-        say("no requirements.txt or pyproject.toml, skipping dependencies")
+        say(NO_MANIFEST_LINE)
         return
 
-    runtime = platform.python_version()
+    def read(name):
+        return read_text(os.path.join(project_dir, name)) if carried(name) else None
+
+    command = None if install_command or plan is None else table["python"]["installCommands"][plan["manager"]]
+    owned = command is not None and tuple(command[: len(UV_SYNC)]) == UV_SYNC
+    python = managed_python_of(python_version_of(read, table), platform.python_version())
+    runtime = python or platform.python_version()
     stamp_path = os.path.join(state_dir, DEPS_STAMP)
     stamp = read_json(stamp_path)
-    moved = bool(stamp) and stamp.get("runtime") != runtime
+    current = None if owned else venv_version_of(project_dir)
+    moved = current is not None and current != minor_of(runtime)
 
     if reinstall:
         say(f"reinstall requested, removing {VENV}")
-    elif moved and os.path.isdir(os.path.join(project_dir, VENV)):
+    elif moved:
         say(f"Python changed to {runtime}, rebuilding {VENV}")
 
     tools = tool_environment(env, state_dir)
-    created = ensure_venv(project_dir, tools, reinstall or moved)
+
+    if owned:
+        if reinstall:
+            shutil.rmtree(os.path.join(project_dir, VENV), ignore_errors=True)
+
+        fresh = not os.path.isfile(os.path.join(project_dir, VENV_PYTHON))
+    else:
+        fresh = ensure_venv(project_dir, tools, reinstall or moved, python)
 
     if plan is None and install_command is None:
-        say("no requirements.txt or pyproject.toml, skipping dependencies")
+        say(NO_MANIFEST_LINE)
         return
 
     manager = "custom" if install_command else plan["manager"]
-    manifest = read_text(os.path.join(project_dir, plan["manifest"])) if plan else ""
     root = text(env.get("SERVERK_ROOT_DIRECTORY")) or ""
-    digest = dependency_hash([install_command or plan["manager"], runtime, root, manifest or ""])
+    manifests = [read(name) or "" for name in dependency_files(plan)] or [""]
+    digest = dependency_hash([install_command or plan["manager"], runtime, root, *manifests])
 
-    if not reinstall and not created and stamp and stamp.get("hash") == digest:
-        say(f"dependencies are up to date ({'custom' if install_command else 'pip'})")
+    if not reinstall and not fresh and stamp and stamp.get("hash") == digest:
+        say(f"dependencies are up to date ({'custom' if install_command else command[0]})")
         return
 
     try:
@@ -1656,20 +1993,35 @@ def install_dependencies(context, reinstall, require_manifest):
         pass
 
     if install_command:
-        argv = shell_command(install_command)
+        argv, run_env = shell_command(install_command), venv_environment(tools, project_dir)
         say(f"installing dependencies: {install_command}")
     else:
-        arguments = table["python"]["installArguments"][plan["manager"]]
-        argv = [os.path.join(project_dir, VENV_PYTHON), "-I", "-u", "-m", "pip", *arguments]
-        say(f"installing dependencies: pip {' '.join(arguments)}")
+        argv, run_env = install_run_of(command, project_dir, tools)
 
-    code, detail, _ = run(argv, project_dir, venv_environment(tools, project_dir))
+        if plan["manager"] in table["python"]["unhonouredManagers"]:
+            say(f"{plan['manifest']} is not used, installing from {PYPROJECT_FILE}")
+
+        say(f"installing dependencies: {' '.join(command)}")
+
+    code, detail, _ = run(argv, project_dir, run_env)
 
     if code != 0:
-        raise LaunchFailure(STAGE_INSTALL, INSTALL_HINT, f"install failed: {detail}", detail)
+        raise stage_failure(STAGE_INSTALL, INSTALL_HINT, code, detail)
 
     write_json(stamp_path, {"hash": digest, "manager": manager, "runtime": runtime, "installedAt": now_iso()})
     say("dependencies installed")
+
+
+def package_folders(project_dir):
+    try:
+        with os.scandir(project_dir) as entries:
+            return [
+                entry.name
+                for entry in entries
+                if entry.is_dir(follow_symlinks=False) and os.path.isfile(os.path.join(entry.path, PACKAGE_MAIN))
+            ]
+    except OSError:
+        return []
 
 
 def resolve_start(project_dir, env, table):
@@ -1683,6 +2035,7 @@ def resolve_start(project_dir, env, table):
         start_command=env.get("SERVERK_START_COMMAND"),
         procfile=read_text(os.path.join(project_dir, table["procfile"]["file"])),
         table=table,
+        packages=package_folders(project_dir),
     )
 
 
@@ -1723,19 +2076,14 @@ def record_deployment(context, outcome, source=None, commit=None, stage=None, de
             "stage": stage,
             "detail": detail,
             "finishedAt": now_iso(),
+            "settled": outcome == OUTCOME_FAILED,
         },
     )
 
-    print(
-        deployment_line(
-            request["deployment"],
-            outcome,
-            commit=commit if source == SOURCE_GIT else None,
-            stage=stage,
-            detail=detail,
-        ),
-        flush=True,
-    )
+    if outcome == OUTCOME_READY:
+        return
+
+    print(deployment_line(request["deployment"], outcome, stage=stage, detail=detail), flush=True)
 
 
 def resume_state_of(raw):
@@ -1848,6 +2196,7 @@ def launch(mode, context):
         )
 
     record_deployment(context, OUTCOME_READY, source=context["synced"]["source"], commit=context["synced"]["commit"])
+    retry_start(context)
 
     program, *args = start["argv"]
     exec_env = venv_environment(bot_environment(env), project_dir)

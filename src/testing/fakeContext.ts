@@ -15,6 +15,11 @@ export interface FakeFollower {
 	onMatch(match: RegExpMatchArray): void;
 }
 
+export interface FakeEmit {
+	event: string;
+	payload: Bridge.Values | null;
+}
+
 export const fakeContext = (options: FakeContextOptions = {}) => {
 	const variables: Record<string, string> = {
 		...options.variables,
@@ -24,6 +29,7 @@ export const fakeContext = (options: FakeContextOptions = {}) => {
 	};
 	const stored = new Map(Object.entries(options.files ?? {}));
 	const followers: FakeFollower[] = [];
+	const emitted: FakeEmit[] = [];
 
 	const context = {
 		server: {
@@ -85,6 +91,12 @@ export const fakeContext = (options: FakeContextOptions = {}) => {
 			warn: () => undefined,
 			error: () => undefined,
 		}),
+		emit(event: string, payload?: Bridge.Values) {
+			emitted.push({
+				event,
+				payload: payload ?? null,
+			});
+		},
 	} as unknown as Bridge.Context;
 
 	const print = (line: string) => {
@@ -105,6 +117,7 @@ export const fakeContext = (options: FakeContextOptions = {}) => {
 		secrets,
 		stored,
 		followers,
+		emitted,
 		print,
 	};
 };
