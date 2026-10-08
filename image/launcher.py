@@ -180,6 +180,12 @@ SYNC_STAMP = "sync.json"
 
 DEPLOYMENT_STAMP = "deployment.json"
 
+SOURCE_FILES = "source-files.json"
+
+DIGEST_PATTERN = re.compile(r"[0-9a-f]{64}")
+
+HASH_CHUNK_BYTES = 1024 * 1024
+
 SNAPSHOTS_DIR = "snapshots"
 
 HISTORY_DIR = "history"
@@ -1177,13 +1183,6 @@ def rev_parse(app_dir, env, name, git_dir=None):
     return output if code == 0 and re.fullmatch(r"[0-9a-f]{40,64}", output) else None
 
 
-def tracked_files(app_dir, env, git_dir=None):
-    prefix = [f"--git-dir={git_dir}", f"--work-tree={app_dir}"] if git_dir else []
-    code, _, output = run(git_argv(*prefix, "ls-files", "-z"), app_dir, env, echo=False, capture=True)
-
-    return [name for name in output.split("\0") if name] if code == 0 else []
-
-
 def prune_empty_parents(app_dir, directory):
     current = directory
 
@@ -1227,29 +1226,141 @@ def remove_files(app_dir, files):
         prune_empty_parents(app_dir, os.path.dirname(path))
 
 
+def tree_files(app_dir, env, git_dir, treeish):
+    prefix = [f"--git-dir={git_dir}"] if git_dir else []
+    code, detail, output = run(git_argv(*prefix, "ls-tree", "-r", "-z", treeish), app_dir, env, echo=False, capture=True)
+
+    if code != 0:
+        raise RuntimeError(detail)
+
+    entries = (entry.split("\t", 1) for entry in output.split("\0") if "\t" in entry)
+
+    return [name for meta, name in entries if meta.split(" ")[1:2] == ["blob"]]
+
+
+def owned_file(name):
+    segments = name.split("/")
+
+    return "\0" not in name and segments[0] != STATE_ENTRY and all(part not in ("", ".", "..", ".git") for part in segments)
+
+
+def digest_of(path):
+    try:
+        info = os.lstat(path)
+        digest = hashlib.sha256()
+
+        if stat.S_ISLNK(info.st_mode):
+            digest.update(f"link:{os.readlink(path)}".encode())
+            return digest.hexdigest()
+
+        if not stat.S_ISREG(info.st_mode):
+            return None
+
+        with open(path, "rb") as handle:
+            for chunk in iter(lambda: handle.read(HASH_CHUNK_BYTES), b""):
+                digest.update(chunk)
+
+        return digest.hexdigest()
+    except (OSError, ValueError):
+        return None
+
+
+def read_source_files(state_dir):
+    files = (read_json(os.path.join(state_dir, SOURCE_FILES)) or {}).get("files")
+
+    if not isinstance(files, dict):
+        return None
+
+    return {
+        name: digest
+        for name, digest in files.items()
+        if owned_file(name) and isinstance(digest, str) and DIGEST_PATTERN.fullmatch(digest)
+    }
+
+
+def write_source_files(state_dir, app_dir, files):
+    digests = ((name, digest_of(os.path.join(app_dir, name))) for name in sorted(set(files)))
+    write_json(os.path.join(state_dir, SOURCE_FILES), {"files": {name: digest for name, digest in digests if digest}})
+
+
+def dropped_files(app_dir, previous, carried):
+    kept = set(carried)
+    unchanged = []
+    changed = 0
+
+    for name, digest in previous.items():
+        if name in kept:
+            continue
+
+        current = digest_of(os.path.join(app_dir, name))
+
+        if current == digest:
+            unchanged.append(name)
+        elif current is not None:
+            changed += 1
+
+    return {"unchanged": unchanged, "changed": changed}
+
+
+def clear_way(app_dir, carried):
+    removed = 0
+
+    for name in carried:
+        segments = name.split("/")
+
+        for depth in range(1, len(segments) + 1):
+            path = os.path.join(app_dir, *segments[:depth])
+
+            try:
+                directory = stat.S_ISDIR(os.lstat(path).st_mode)
+            except OSError:
+                break
+
+            if directory == (depth == len(segments)):
+                if directory:
+                    shutil.rmtree(path)
+                else:
+                    os.remove(path)
+
+                removed += 1
+                break
+
+    if removed:
+        say(f"removed {removed} {'path' if removed == 1 else 'paths'} in the way of the source's files")
+
+
+def files_word(count):
+    return "file" if count == 1 else "files"
+
+
+def remove_dropped(app_dir, dropped):
+    remove_files(app_dir, dropped["unchanged"])
+    removed = sum(1 for name in dropped["unchanged"] if not os.path.lexists(os.path.join(app_dir, name)))
+
+    if removed:
+        say(f"removed {removed} {files_word(removed)} the source no longer carries")
+
+    if dropped["changed"]:
+        say(f"kept {dropped['changed']} changed {files_word(dropped['changed'])} the source no longer carries")
+
+
 def leave_git_source(context):
-    app_dir = context["app_dir"]
-    git_dir = os.path.join(app_dir, ".git")
+    git_dir = os.path.join(context["app_dir"], ".git")
 
     if not os.path.isdir(git_dir):
         return
 
     say("switching from the repository to uploaded code")
-
-    remove_files(app_dir, tracked_files(app_dir, git_environment(context["env"], None, None)))
     shutil.rmtree(git_dir, ignore_errors=True)
 
 
 def leave_snapshot_source(context):
-    app_dir = context["app_dir"]
     history_dir = os.path.join(context["state_dir"], HISTORY_DIR)
 
     if not os.path.isdir(history_dir):
         return
 
     say("switching from uploaded code to the repository")
-
-    remove_files(app_dir, tracked_files(app_dir, git_environment(context["env"], None, None), history_dir))
     shutil.rmtree(history_dir, ignore_errors=True)
 
 
@@ -1342,6 +1453,8 @@ def sync_git(context):
 
         return code == 0 and bool(output.strip())
 
+    previous = read_source_files(state_dir) or {}
+
     say(f"fetching {repo} at {short_commit(ref)}" if ref else f"pulling {repo} ({branch})")
 
     created = False
@@ -1374,7 +1487,10 @@ def sync_git(context):
         if tracks_state(target):
             raise SyncRefusal(STATE_TRACKED, TRACKED_STATE_HINT)
 
-        leave_snapshot_source(context)
+        carried = tree_files(app_dir, git_env, None, target)
+        clear_way(app_dir, carried)
+        dropped = dropped_files(app_dir, previous, carried)
+        git("read-tree", "--empty")
 
         if ref is None:
             git("checkout", "--quiet", "--force", "-B", branch, "FETCH_HEAD")
@@ -1398,6 +1514,10 @@ def sync_git(context):
             return {"source": SOURCE_GIT, "commit": before}
 
         raise LaunchFailure(STAGE_SYNC, SYNC_HINT, f"sync failed: {detail}", detail) from error
+
+    leave_snapshot_source(context)
+    remove_dropped(app_dir, dropped)
+    write_source_files(state_dir, app_dir, carried)
 
     after = rev_parse(app_dir, git_env, "HEAD")
 
@@ -1672,6 +1792,8 @@ def sync_snapshot(context):
             f"snapshot {snapshot_id} is not on this bot",
         )
 
+    previous = read_source_files(state_dir) or {}
+
     leave_git_source(context)
 
     message = f"deployment {request['deployment']}" if request["deployment"] else f"snapshot {snapshot_id}"
@@ -1685,8 +1807,8 @@ def sync_snapshot(context):
         if incoming is not None:
             say(f"unpacking snapshot {snapshot_id}")
 
-            previous = tracked_files(app_dir, git_env, history_dir)
-            remove_files(app_dir, [name for name in previous if name not in incoming])
+            clear_way(app_dir, incoming)
+            remove_dropped(app_dir, dropped_files(app_dir, previous, incoming))
 
             with zipfile.ZipFile(archive) as bundle:
                 entries = snapshot_plan(bundle)
@@ -1714,13 +1836,21 @@ def sync_snapshot(context):
             history("update-ref", "--no-deref", "HEAD", commit)
             history("tag", "--force", tag, commit)
             os.remove(archive)
+            carried = written
         else:
             say(f"restoring snapshot {snapshot_id}")
+            carried = tree_files(app_dir, git_env, history_dir, tag)
+            clear_way(app_dir, carried)
+            dropped = dropped_files(app_dir, previous, carried)
+            history("read-tree", "--empty")
             history("checkout", "--quiet", "--force", "--detach", tag)
+            remove_dropped(app_dir, dropped)
     except LaunchFailure:
         raise
     except (SnapshotRefused, RuntimeError, OSError, zipfile.BadZipFile, zlib.error, EOFError, ValueError) as error:
         raise broken(error) from error
+
+    write_source_files(state_dir, app_dir, carried)
 
     try:
         prune_history(history, tag)

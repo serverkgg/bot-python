@@ -1,10 +1,12 @@
 import contextlib
+import hashlib
 import io
 import json
 import os
 import platform
 import shutil
 import stat
+import subprocess
 import tempfile
 import unittest
 import zipfile
@@ -14,6 +16,22 @@ import launcher
 TEMPLATES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "templates")
 
 SHA = "0123456789abcdef0123456789abcdef01234567"
+
+REMOTE = "https://example.test/bots/sample"
+
+RUNTIME_FILES = {"data/bot.sqlite": "rows", "cache.json": "{}"}
+
+REMOVED_ONE = "serverk: removed 1 file the source no longer carries"
+
+REMOVED_TWO = "serverk: removed 2 files the source no longer carries"
+
+KEPT_ONE = "serverk: kept 1 changed file the source no longer carries"
+
+IN_THE_WAY_ONE = "serverk: removed 1 path in the way of the source's files"
+
+
+def sha(content):
+    return hashlib.sha256(content.encode()).hexdigest()
 
 
 def template_start(name):
@@ -873,6 +891,306 @@ class SnapshotTest(unittest.TestCase):
     def test_caps_the_expanded_size(self):
         with self.assertRaises(launcher.SnapshotRefused):
             launcher.snapshot_plan(bundle_of([("a.py", "x" * 10, 0o644), ("b.py", "y" * 10, 0o644)]), max_bytes=15)
+
+
+class SourceFilesTest(unittest.TestCase):
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="bot-python-source-")
+        self.app = os.path.join(self.root, "app")
+        self.state = os.path.join(self.app, launcher.STATE_ENTRY)
+        self.work = os.path.join(self.root, "remote-work")
+        self.bare = os.path.join(self.root, "sample.git")
+        self.bin = os.path.join(self.root, "bin")
+
+        for directory in (self.state, self.work, self.bin):
+            os.makedirs(directory)
+
+        wrapper = os.path.join(self.bin, "git")
+
+        with open(wrapper, "w", encoding="utf-8") as handle:
+            handle.write(
+                f'#!/bin/sh\nexec {shutil.which("git")} -c "url.file://{self.bare}.insteadOf={REMOTE}" '
+                '-c protocol.file.allow=always "$@"\n'
+            )
+
+        os.chmod(wrapper, 0o755)
+        self.git(self.root, "init", "--quiet", "--bare", self.bare)
+        self.git(self.work, "init", "--quiet", "-b", "main")
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def git(self, cwd, *args):
+        result = subprocess.run(
+            ["git", "-c", "user.name=Serverk", "-c", "user.email=test@serverk.gg", *args],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        return result.stdout.strip()
+
+    def commit(self, tree):
+        if self.git(self.work, "ls-files"):
+            self.git(self.work, "rm", "--quiet", "-r", ".")
+
+        for name, content in tree.items():
+            path = os.path.join(self.work, name)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(content)
+
+        self.git(self.work, "add", "--all")
+        self.git(self.work, "commit", "--quiet", "-m", "next")
+        self.git(self.work, "push", "--quiet", self.bare, "main")
+
+        return self.git(self.work, "rev-parse", "HEAD")
+
+    def place(self, snapshot, tree):
+        snapshots = os.path.join(self.state, launcher.SNAPSHOTS_DIR)
+        os.makedirs(snapshots, exist_ok=True)
+
+        with zipfile.ZipFile(os.path.join(snapshots, f"{snapshot}.zip"), "w") as archive:
+            for name, content in tree.items():
+                archive.writestr(f"bot/{name}", content)
+
+    def sync(self, deployment, ref=None, snapshot=None, **env):
+        context = {
+            "app_dir": self.app,
+            "state_dir": self.state,
+            "env": {"PATH": f"{self.bin}:{os.environ.get('PATH', '/usr/bin:/bin')}", "HOME": self.root, **env},
+            "request": {
+                "deployment": deployment,
+                "ref": ref,
+                "snapshot": snapshot,
+                "reinstall": False,
+                "deploying": True,
+            },
+        }
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            launcher.sync_source(context)
+
+        return output.getvalue().splitlines()
+
+    def deploy(self, deployment, ref=None, **env):
+        return self.sync(deployment, ref=ref, SERVERK_REPO_URL=REMOTE, **env)
+
+    def read(self, name):
+        with open(os.path.join(self.app, name), encoding="utf-8") as handle:
+            return handle.read()
+
+    def write(self, name, content):
+        path = os.path.join(self.app, name)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(content)
+
+    def write_runtime(self):
+        for name, content in RUNTIME_FILES.items():
+            self.write(name, content)
+
+    def assert_runtime_kept(self):
+        for name, content in RUNTIME_FILES.items():
+            self.assertEqual(self.read(name), content)
+
+    def lose_history(self):
+        for directory in (launcher.HISTORY_DIR, launcher.SNAPSHOTS_DIR):
+            shutil.rmtree(os.path.join(self.state, directory), ignore_errors=True)
+
+    def recorded(self):
+        return sorted(launcher.read_source_files(self.state) or {})
+
+    def removed_any(self, lines):
+        return any(line.startswith("serverk: removed") for line in lines)
+
+    def test_reads_back_the_hash_of_each_file_it_wrote_and_none_outside_the_bots_own_files(self):
+        manifest = os.path.join(self.state, launcher.SOURCE_FILES)
+
+        self.assertIsNone(launcher.read_source_files(self.state))
+
+        self.write("a.py", "a")
+        self.write("src/b.py", "b")
+        launcher.write_source_files(self.state, self.app, ["src/b.py", "a.py", "src/b.py", "missing.py"])
+        self.assertEqual(launcher.read_source_files(self.state), {"a.py": sha("a"), "src/b.py": sha("b")})
+
+        with open(manifest, "w", encoding="utf-8") as handle:
+            json.dump(
+                {
+                    "files": {
+                        "kept.py": sha("kept"),
+                        ".gitignore": sha("ignore"),
+                        "short.py": "abc",
+                        "number.py": 7,
+                        ".serverk/deployment.json": sha("x"),
+                        ".git/config": sha("x"),
+                        "lib/.git/HEAD": sha("x"),
+                        "../outside.py": sha("x"),
+                        "lib/../up.py": sha("x"),
+                        "/etc/passwd": sha("x"),
+                        "lib//double.py": sha("x"),
+                        "./here.py": sha("x"),
+                    }
+                },
+                handle,
+            )
+
+        self.assertEqual(launcher.read_source_files(self.state), {"kept.py": sha("kept"), ".gitignore": sha("ignore")})
+
+        with open(manifest, "w", encoding="utf-8") as handle:
+            json.dump({"files": ["a.py"]}, handle)
+
+        self.assertIsNone(launcher.read_source_files(self.state))
+
+    def test_keeps_the_bots_files_and_the_dropped_files_it_changed_replaces_what_a_commit_carries_and_drops_the_rest(
+        self,
+    ):
+        one = self.commit({"main.py": "one()", "config.json": "one", "cogs/old.py": "old", "cogs/tuned.py": "tuned"})
+        two = self.commit({"main.py": "two()", "config.json": "two"})
+
+        self.deploy("dep_1", ref=one)
+        self.write_runtime()
+        self.write("config.json", "edited")
+        self.write("cogs/tuned.py", "mine")
+
+        second = self.deploy("dep_2", ref=two)
+
+        self.assertIn(REMOVED_ONE, second)
+        self.assertIn(KEPT_ONE, second)
+        self.assertFalse(os.path.exists(os.path.join(self.app, "cogs", "old.py")))
+        self.assertEqual(self.read("cogs/tuned.py"), "mine")
+        self.assertEqual(self.read("main.py"), "two()")
+        self.assertEqual(self.read("config.json"), "two")
+        self.assertEqual(self.recorded(), ["config.json", "main.py"])
+        self.assert_runtime_kept()
+
+        self.write("config.json", "edited")
+        rollback = self.deploy("dep_3", ref=one)
+
+        self.assertFalse(self.removed_any(rollback))
+        self.assertEqual(self.read("cogs/old.py"), "old")
+        self.assertEqual(self.read("cogs/tuned.py"), "tuned")
+        self.assertEqual(self.read("config.json"), "one")
+        self.assert_runtime_kept()
+
+        pull = self.deploy("dep_4", SERVERK_REPO_BRANCH="main")
+
+        self.assertIn(REMOVED_TWO, pull)
+        self.assertEqual(launcher.read_json(os.path.join(self.state, launcher.SYNC_STAMP))["commit"], two)
+        self.assertFalse(os.path.exists(os.path.join(self.app, "cogs")))
+        self.assert_runtime_kept()
+        self.assertNotIn("data/bot.sqlite", launcher.read_source_files(self.state))
+
+    def test_keeps_the_bots_files_and_the_dropped_files_it_changed_replaces_what_a_snapshot_carries_and_drops_the_rest(
+        self,
+    ):
+        self.place("snap_1", {"main.py": "one()", "config.json": "one", "cogs/old.py": "old", "cogs/tuned.py": "tuned"})
+        self.sync("dep_1", snapshot="snap_1")
+        self.write_runtime()
+        self.write("config.json", "edited")
+        self.write("cogs/tuned.py", "mine")
+        self.place("snap_2", {"main.py": "two()", "config.json": "two"})
+
+        second = self.sync("dep_2", snapshot="snap_2")
+
+        self.assertIn(REMOVED_ONE, second)
+        self.assertIn(KEPT_ONE, second)
+        self.assertFalse(os.path.exists(os.path.join(self.app, "cogs", "old.py")))
+        self.assertEqual(self.read("cogs/tuned.py"), "mine")
+        self.assertEqual(self.read("main.py"), "two()")
+        self.assertEqual(self.read("config.json"), "two")
+        self.assertEqual(self.recorded(), ["config.json", "main.py"])
+        self.assert_runtime_kept()
+
+        self.write("config.json", "edited")
+        rollback = self.sync("dep_3", snapshot="snap_1")
+
+        self.assertIn("serverk: restoring snapshot snap_1", rollback)
+        self.assertFalse(self.removed_any(rollback))
+        self.assertEqual(self.read("cogs/old.py"), "old")
+        self.assertEqual(self.read("cogs/tuned.py"), "tuned")
+        self.assertEqual(self.read("config.json"), "one")
+        self.assert_runtime_kept()
+
+        forward = self.sync("dep_4", snapshot="snap_2")
+
+        self.assertIn("serverk: restoring snapshot snap_2", forward)
+        self.assertIn(REMOVED_TWO, forward)
+        self.assertFalse(os.path.exists(os.path.join(self.app, "cogs")))
+        self.assert_runtime_kept()
+
+    def test_lets_a_snapshots_folder_replace_a_file_the_author_changed_at_its_path_and_its_file_replace_a_folder(self):
+        self.place("snap_1", {"main.py": "one()", "extras": "file"})
+        self.sync("dep_1", snapshot="snap_1")
+        self.write_runtime()
+        self.write("extras", "mine")
+        self.place("snap_2", {"main.py": "two()", "extras/a.py": "a"})
+
+        second = self.sync("dep_2", snapshot="snap_2")
+
+        self.assertIn(IN_THE_WAY_ONE, second)
+        self.assertFalse(any(line.startswith("serverk: kept") for line in second))
+        self.assertEqual(self.read("extras/a.py"), "a")
+        self.assertEqual(self.recorded(), ["extras/a.py", "main.py"])
+
+        self.write("extras/a.py", "mine")
+        self.place("snap_3", {"main.py": "three()", "extras": "file again"})
+
+        self.assertIn(IN_THE_WAY_ONE, self.sync("dep_3", snapshot="snap_3"))
+        self.assertEqual(self.read("extras"), "file again")
+        self.assert_runtime_kept()
+
+    def test_lets_a_commits_folder_replace_a_file_the_author_changed_at_its_path(self):
+        one = self.commit({"main.py": "one()", "extras": "file"})
+        two = self.commit({"main.py": "two()", "extras/a.py": "a"})
+
+        self.deploy("dep_1", ref=one)
+        self.write_runtime()
+        self.write("extras", "mine")
+
+        second = self.deploy("dep_2", ref=two)
+
+        self.assertIn(IN_THE_WAY_ONE, second)
+        self.assertFalse(any(line.startswith("serverk: kept") for line in second))
+        self.assertEqual(self.read("extras/a.py"), "a")
+        self.assertEqual(self.recorded(), ["extras/a.py", "main.py"])
+        self.assert_runtime_kept()
+
+    def test_drops_what_the_last_deployment_wrote_after_a_restore_lost_the_history_or_the_git_folder(self):
+        self.place("snap_1", {"main.py": "one()", "cogs/old.py": "old"})
+        self.sync("dep_1", snapshot="snap_1")
+        self.write_runtime()
+
+        self.assertEqual(self.recorded(), ["cogs/old.py", "main.py"])
+
+        self.lose_history()
+        self.place("snap_2", {"main.py": "two()", "extra.py": "extra"})
+
+        self.assertIn(REMOVED_ONE, self.sync("dep_2", snapshot="snap_2"))
+        self.assertFalse(os.path.exists(os.path.join(self.app, "cogs")))
+        self.assertEqual(self.recorded(), ["extra.py", "main.py"])
+        self.assert_runtime_kept()
+
+        self.lose_history()
+        one = self.commit({"main.py": "git()", "config.json": "one"})
+
+        self.assertIn(REMOVED_ONE, self.deploy("dep_3", ref=one))
+        self.assertFalse(os.path.exists(os.path.join(self.app, "extra.py")))
+        self.assertEqual(self.recorded(), ["config.json", "main.py"])
+        self.assert_runtime_kept()
+
+        shutil.rmtree(os.path.join(self.app, ".git"))
+        two = self.commit({"main.py": "git2()"})
+
+        self.assertIn(REMOVED_ONE, self.deploy("dep_4", ref=two))
+        self.assertFalse(os.path.exists(os.path.join(self.app, "config.json")))
+        self.assertEqual(self.read("main.py"), "git2()")
+        self.assertEqual(self.recorded(), ["main.py"])
+        self.assert_runtime_kept()
 
 
 class RootDirectoryTest(unittest.TestCase):
