@@ -28,13 +28,21 @@
 
 - `ModuleNotFoundError: No module named 'discord'`
 
-أضف المكتبة إلى `requirements.txt`، ثم انشر من جديد. وقد يختلف اسم المكتبة عن الاسم الذي تستورده: `discord` من المكتبة `discord.py`، و `telegram` من `python-telegram-bot`.
+أضف المكتبة إلى `requirements.txt`، ثم انشر من جديد. وقد يختلف اسم المكتبة عن الاسم الذي تستورده: `discord` من المكتبة `discord.py`، و `telegram` من `python-telegram-bot`. وإذا توقف بوت صوتي على `discord.py` عند `RuntimeError: davey library needed in order to use voice`، فضع `discord.py[voice]` في `requirements.txt` بدلًا من `discord.py`.
 
 ## مكتبة تيليقرام المثبّتة غير صحيحة
 
 - `ImportError: cannot import name 'Update' from 'telegram'`
 
 استبدل `telegram` بـ `python-telegram-bot` في `requirements.txt`، ثم انشر من جديد.
+
+## مكتبة ديسكورد المثبّتة غير صحيحة
+
+- `AttributeError: module 'discord' has no attribute 'Bot'`
+- `ModuleNotFoundError: No module named 'discord.app_commands'`
+- `ImportError: cannot import name 'app_commands' from 'discord'`
+
+تستورد `discord.py` و `py-cord` كلتيهما باسم `discord`، وكودك مكتوب للمكتبة غير المثبّتة منهما. الكود الذي يستخدم `discord.Bot` يحتاج `py-cord`، والكود الذي يستورد `discord.app_commands` يحتاج `discord.py`. أبقِ هذه المكتبة وحدها في `requirements.txt` ولا تضع الاثنتين معًا، ثم انشر من جديد.
 
 ## تعذّر بناء إحدى المكتبات
 

@@ -28,13 +28,21 @@ python-telegram-bot doesn't stop on this line: it prints it and keeps going besi
 
 - `ModuleNotFoundError: No module named 'discord'`
 
-Add the library to `requirements.txt`, then redeploy. The library's name can differ from the name you import: `discord` comes from `discord.py`, and `telegram` from `python-telegram-bot`.
+Add the library to `requirements.txt`, then redeploy. The library's name can differ from the name you import: `discord` comes from `discord.py`, and `telegram` from `python-telegram-bot`. A voice bot on `discord.py` that stops on `RuntimeError: davey library needed in order to use voice` needs `discord.py[voice]` in `requirements.txt` instead of `discord.py`.
 
 ## The wrong Telegram library is installed
 
 - `ImportError: cannot import name 'Update' from 'telegram'`
 
 Replace `telegram` with `python-telegram-bot` in `requirements.txt`, then redeploy.
+
+## The wrong Discord library is installed
+
+- `AttributeError: module 'discord' has no attribute 'Bot'`
+- `ModuleNotFoundError: No module named 'discord.app_commands'`
+- `ImportError: cannot import name 'app_commands' from 'discord'`
+
+You import both `discord.py` and `py-cord` as `discord`, and your code was written for the one that isn't installed. Code that uses `discord.Bot` needs `py-cord`, and code that imports `discord.app_commands` needs `discord.py`. Keep only that one in `requirements.txt`, never both, then redeploy.
 
 ## A library couldn't be built
 
