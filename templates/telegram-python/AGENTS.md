@@ -19,5 +19,5 @@ This repository is a Telegram bot in Python with python-telegram-bot, deployed o
 ## Deploy and debug
 
 - With auto deploy on, the default, a push to the connected branch deploys. A variable change reaches the bot with its next deployment.
-- MCP server: `https://api.serverk.gg/mcp`, scopes `customer:read customer:write`. Tools: `customer_server_env_keys`, `customer_server_env_set`, `customer_server_deploy`, `customer_server_deployments`, `customer_server_deployment_log`, `customer_server_terminal`, `customer_server_rollback`.
+- MCP server: `https://api.serverk.gg/mcp`, scopes `customer:read customer:write customer:destructive` (the variable tools need `customer:destructive`). Tools: `customer_server_env_keys`, `customer_server_env_set`, `customer_server_deploy`, `customer_server_deployments`, `customer_server_deployment_log`, `customer_server_terminal`, `customer_server_rollback`.
 - Serverk's `use-serverk` skill teaches the whole workflow; its repository under `serverkgg` is named in https://serverk.gg/llms.txt once published. Guides: https://serverk.gg/bots/bot-python/guides
