@@ -3,7 +3,7 @@
 كل سطر يبدأ بـ `serverk:` صادر منا وليس من بوتك، ويوضح ما نفّذناه قبل أن يبدأ:
 
 - `deploying ...`: بدأ نشر جديد.
-- `fetching ... at ...` أو `unpacking snapshot ...`: نسحب الكوميت من الريبو، أو نفك الكود الذي رفعته.
+- `fetching ... at ...` أو `unpacking snapshot ...`: نسحب الـ commit من الريبو، أو نفك الكود الذي رفعته.
 - `creating .venv ...`: ننشئ بيئة بايثون خاصة ببوتك.
 - `installing dependencies ...`: نثبّت المكتبات.
 - `dependencies are up to date`: لم يتغيّر شيء، فلم نعد التثبيت.
@@ -28,7 +28,7 @@ KeyError: 'DISCORD_TOKEN'
 
 ## أشهر الأخطاء
 
-- `deployment ... failed: sync: ...`: تعذّر سحب الكوميت. تأكد من وجود الريبو والفرع، ومن أن تطبيق Serverk على GitHub يصل إلى الريبو.
+- `deployment ... failed: sync: ...`: تعذّر سحب الـ commit. تأكد من وجود الريبو والفرع، ومن أن تطبيق Serverk على GitHub يصل إلى الريبو.
 - `deployment ... failed: sync: repository tracks .serverk`: في الريبو مجلد `.serverk`، وهذا الاسم محجوز لمنصة سيرفرك. احذف المجلد من الريبو وانشر من جديد.
 - `deployment ... failed: install: ...`: فشل تثبيت المكتبات، والسطر يوضح السبب. غالبًا يكون اسم مكتبة غير صحيح أو إصدار غير موجود في `requirements.txt`.
 - `deployment ... failed: start: nothing to start`: لم نجد ملفًا لتشغيله. سمِّ ملفك الرئيسي `main.py`، أو اضبط أمر التشغيل من إعدادات بوتك.

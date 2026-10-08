@@ -8,7 +8,7 @@ If every file in the zip sits inside one folder, we lift them out so `requiremen
 
 ## Ship a new version
 
-Changed your code? In the **Deployments** tab press **Upload a new version** and upload the folder or the zip again. It becomes a new deployment, and files you deleted from your copy are deleted from your bot too, unless you changed them in the file manager. Files your bot writes while it runs always stay.
+Changed your code? In the **Deployments** tab press **Upload a new version** and upload the folder or the zip again. It becomes a new deployment. A file your bot writes while it runs stays, unless the new upload carries a file with the same name, which replaces it. A file you removed from your copy is removed from your bot too, unless it changed since the last deployment, for example in the **Files** tab.
 
 @[open](overview)
 

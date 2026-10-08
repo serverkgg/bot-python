@@ -195,6 +195,22 @@ guides:
     bodyPath:
       ar: guides/upload-zip/ar.md
       en: guides/upload-zip/en.md
+  - id: data-and-backups
+    title:
+      ar: بيانات بوتك والنسخ الاحتياطية
+      en: Your bot's data and backups
+    summary:
+      ar: ما يستبدله النشر والرفع واسترجاع نشر سابق أو نسخة احتياطية والريسيت من ملفات بوتك، وأين تحفظ بياناته لتبقى.
+      en: What a deployment, an upload, a rollback, a restore and a reset each replace in your bot folder, and where to keep your data so it stays.
+    tags:
+      - deploy
+    surfaces:
+      - backups
+      - files
+      - overview
+    bodyPath:
+      ar: guides/data-and-backups/ar.md
+      en: guides/data-and-backups/en.md
   - id: discord-token
     title:
       ar: أين تجد توكن بوت ديسكورد

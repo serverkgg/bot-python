@@ -20,4 +20,4 @@ Press **Redeploy** on your bot's page and we deploy the latest commit of the bra
 
 ## What changes during a deployment?
 
-A deployment resets every file that exists in the repository to its version in the commit, so any change you made in the file manager to a file from the repository is gone. Files that are not in the repository, such as `.venv` or your bot's data files, stay as they are.
+A deployment resets every file that exists in the repository to its version in the commit, so any change to those files is gone, whether you made it in the **Files** tab or your bot wrote it while running. Files the repository never carried, such as `.venv` and the data files your bot creates, stay as they are. Keep data files such as `data.json` or `bot.sqlite` out of the repository by adding them to `.gitignore`.
