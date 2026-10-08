@@ -150,6 +150,22 @@ guides:
     bodyPath:
       ar: guides/environment-variables/ar.md
       en: guides/environment-variables/en.md
+  - id: moving-in
+    title:
+      ar: انقل بوتك من استضافة أخرى
+      en: Move your bot in from another host
+    summary:
+      ar: من Replit و Discloud و Railway و Heroku واستضافات Pterodactyl و VPS، ما تحضره معك وما يتغيّر هنا.
+      en: From Replit, Discloud, Railway, Heroku, a Pterodactyl host or a VPS, what to bring and what changes here.
+    tags:
+      - start
+      - deploy
+    surfaces:
+      - overview
+      - files
+    bodyPath:
+      ar: guides/moving-in/ar.md
+      en: guides/moving-in/en.md
   - id: connect-github
     title:
       ar: اربط بوتك بريبو GitHub
@@ -195,6 +211,36 @@ guides:
     bodyPath:
       ar: guides/upload-zip/ar.md
       en: guides/upload-zip/en.md
+  - id: upload-rules
+    title:
+      ar: قواعد رفع الكود
+      en: Upload rules
+    summary:
+      ar: المجلد أو ملف zip، والحدود، والمجلد الذي يغلّف الملفات، والملفات المخفية، وماذا يحدث لملف .env.
+      en: A folder or a zip, the limits, the folder around your files, hidden files, and what happens to .env.
+    tags:
+      - deploy
+    surfaces:
+      - files
+      - overview
+    bodyPath:
+      ar: guides/upload-rules/ar.md
+      en: guides/upload-rules/en.md
+  - id: project-shapes
+    title:
+      ar: كيف نثبّت مشروع بايثون ونشغّله
+      en: How we install and start a Python project
+    summary:
+      ar: requirements.txt و uv و Poetry و PDM و Pipfile، وإصدار بايثون، وترتيب أمر التشغيل حتى python -m.
+      en: requirements.txt, uv, Poetry, PDM and Pipfile, the Python version, and the start order down to python -m.
+    tags:
+      - deploy
+    surfaces:
+      - overview
+      - console
+    bodyPath:
+      ar: guides/project-shapes/ar.md
+      en: guides/project-shapes/en.md
   - id: data-and-backups
     title:
       ar: بيانات بوتك والنسخ الاحتياطية
@@ -213,11 +259,11 @@ guides:
       en: guides/data-and-backups/en.md
   - id: discord-token
     title:
-      ar: أين تجد توكن بوت ديسكورد
-      en: Where to find your Discord bot token
+      ar: توكن بوت ديسكورد والـ Intents والصلاحيات
+      en: Your Discord bot's token, intents and permissions
     summary:
-      ar: من Developer Portal إلى التوكن في متغيرات بوتك، ولماذا لا تستخدم توكن حسابك الشخصي.
-      en: From the Developer Portal to the token in your bot's variables, and why you never use your personal account token.
+      ar: من Developer Portal إلى التوكن في متغيرات بوتك، ثم الـ Intents التي يطلبها كودك، ورابط الإضافة والصلاحيات.
+      en: From the Developer Portal to the token in your variables, then the intents your code asks for, the invite link and the permissions.
     tags:
       - tokens
     surfaces:
@@ -256,3 +302,18 @@ guides:
     bodyPath:
       ar: guides/read-the-logs/ar.md
       en: guides/read-the-logs/en.md
+  - id: errors
+    title:
+      ar: أخطاء بوتك وحلولها
+      en: Your bot's errors and how to fix them
+    summary:
+      ar: السطر الذي تطبعه المكتبة لكل سبب نعرفه، وما تفعله لتصلحه.
+      en: The line the library prints for every cause we name, and what to do to fix it.
+    tags:
+      - troubleshoot
+    surfaces:
+      - console
+      - overview
+    bodyPath:
+      ar: guides/errors/ar.md
+      en: guides/errors/en.md

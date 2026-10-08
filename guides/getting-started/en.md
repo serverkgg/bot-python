@@ -13,7 +13,7 @@ After you pay, your bot's page opens and shows the deployment line by line:
 
 - We pull the code from your repository, or unpack what you uploaded.
 - We give your bot a Python environment of its own (`.venv`) and install the dependencies into it from the first file we find among `requirements.txt`, `uv.lock`, `poetry.lock`, `pdm.lock`, `Pipfile` and `pyproject.toml`. We only reinstall when the dependencies change.
-- We run the `worker` or `bot` line of your `Procfile` if you have one; otherwise the first file we find among `main.py`, `bot.py`, `app.py`, `src/main.py` and `src/bot.py`; otherwise `python -m` with the one folder that holds a `__main__.py`.
+- We run the start command in your bot's settings if you set one; otherwise `start` in `serverk.json`; otherwise the `worker` or `bot` line of your `Procfile`; otherwise the first file we find among `main.py`, `bot.py`, `app.py`, `src/main.py` and `src/bot.py`; otherwise `python -m` with the one folder that holds a `__main__.py`.
 
 The moment these two lines show up in the console, your bot has started:
 
