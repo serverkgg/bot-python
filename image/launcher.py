@@ -2267,6 +2267,14 @@ def resume_without_token(mode, context):
     )
 
 
+def enter_stage(context, stage):
+    context["stage"] = stage
+    request = context.get("request") or {}
+
+    if request.get("deploying") and request.get("deployment"):
+        say(f"deployment {request['deployment']} stage {stage}")
+
+
 def launch(mode, context):
     env = dict(os.environ)
     app_dir = os.getcwd()
@@ -2295,7 +2303,7 @@ def launch(mode, context):
             if context["request"]["deploying"] and context["request"]["deployment"]:
                 say(f"deploying {context['request']['deployment']}")
 
-        context["stage"] = source_stage(context["request"])
+        enter_stage(context, source_stage(context["request"]))
         context["synced"] = sync_source(context)
 
         if "SERVERK_GIT_TOKEN" in env:
@@ -2306,13 +2314,13 @@ def launch(mode, context):
         app_dir, text(env.get("SERVERK_ROOT_DIRECTORY")), source_stage(context["request"])
     )
     project_dir = context["project_dir"]
-    context["stage"] = STAGE_INSTALL
+    enter_stage(context, STAGE_INSTALL)
     install_dependencies(context, reinstall=context["request"]["reinstall"], require_manifest=mode == "install")
 
     if mode == "install":
         raise LaunchExit(0)
 
-    context["stage"] = STAGE_START
+    enter_stage(context, STAGE_START)
 
     start = resolve_start(project_dir, env, context["table"])
 

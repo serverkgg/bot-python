@@ -11,8 +11,8 @@ metadata:
     ar: اربط ريبو GitHub أو ارفع كود بوتك، ونتعرف على طريقة تشغيله تلقائيًا. أضف متغيراتك، وانشر بضغطة واحدة، ونثبّت المكتبات من requirements.txt في بيئة خاصة ببوتك، وتابع كل ما يطبعه لحظة بلحظة.
     en: Link a GitHub repository or upload your bot's code, and we work out how to run it. Add your variables, deploy in one click, and we install the dependencies from requirements.txt into an environment of its own while you follow everything it prints, live.
   tagline:
-    ar: شغّل بوت ديسكورد أو تيليقرام الذي كتبته بلغة بايثون، ليبقى شغّالًا ليلًا ونهارًا
-    en: Run the Discord or Telegram bot you wrote in Python, day and night
+    ar: أي بوت بـ Python، مع requirements.txt أو uv أو Poetry أو Pipfile، يُنشر من GitHub أو ملف zip
+    en: Any Python bot, with requirements.txt, uv, Poetry or Pipfile, deployed from GitHub or a zip
   logo: assets/logo.webp
   banner: assets/banner.webp
 
@@ -181,6 +181,20 @@ guides:
     bodyPath:
       ar: guides/connect-github/ar.md
       en: guides/connect-github/en.md
+  - id: deploy-button
+    title:
+      ar: أضف زر النشر إلى ريبو بوتك
+      en: Add a deploy button to your repository
+    summary:
+      ar: زر في README يفتح صفحة النشر على ريبو بوتك، لأي ريبو عام على GitHub.
+      en: A README button that opens the deploy page on your bot's repository, for any public GitHub repository.
+    tags:
+      - deploy
+    surfaces:
+      - overview
+    bodyPath:
+      ar: guides/deploy-button/ar.md
+      en: guides/deploy-button/en.md
   - id: deployments
     title:
       ar: النشرات والرجوع إلى إصدار سابق

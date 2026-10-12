@@ -1303,6 +1303,34 @@ class LinesTest(unittest.TestCase):
         self.assertEqual(printed.getvalue(), "serverk: deployment dep_1 failed: install: nope\n")
 
 
+class EnterStageTest(unittest.TestCase):
+    def enter(self, request, stage):
+        context = {"request": request, "stage": launcher.STAGE_SYNC}
+        printed = io.StringIO()
+
+        with contextlib.redirect_stdout(printed):
+            launcher.enter_stage(context, stage)
+
+        return context["stage"], printed.getvalue()
+
+    def test_prints_the_stage_a_deployment_enters(self):
+        self.assertEqual(
+            self.enter({"deployment": "dep_1", "deploying": True}, launcher.STAGE_INSTALL),
+            (launcher.STAGE_INSTALL, "serverk: deployment dep_1 stage install\n"),
+        )
+
+    def test_prints_nothing_without_a_deployment_in_flight(self):
+        self.assertEqual(
+            self.enter({"deployment": "dep_1", "deploying": False}, launcher.STAGE_START),
+            (launcher.STAGE_START, ""),
+        )
+        self.assertEqual(
+            self.enter({"deployment": None, "deploying": True}, launcher.STAGE_START),
+            (launcher.STAGE_START, ""),
+        )
+        self.assertEqual(self.enter(None, launcher.STAGE_SNAPSHOT), (launcher.STAGE_SNAPSHOT, ""))
+
+
 class StartRetryTest(unittest.TestCase):
     FAILED = {"deployment": "dep_1", "source": "git", "commit": SHA, "outcome": "failed", "stage": "start"}
 

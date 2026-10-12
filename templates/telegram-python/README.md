@@ -6,9 +6,9 @@ A minimal Telegram bot in Python: it greets you on `/start` and echoes every mes
 
 ## شغّله على Serverk
 
-[انشره على Serverk](https://serverk.gg/bots/create?template=telegram-python)
+[![انشر على سيرفرك](https://serverk.gg/button.ar.svg)](https://serverk.gg/bots/create?template=telegram-python)
 
-1. افتح الرابط أعلاه، أو اضغط **Use this template** في GitHub ثم اختر ريبوك الجديد من «شغّل بوتك».
+1. اضغط الزر أعلاه، أو اضغط **Use this template** في GitHub ثم اختر ريبوك الجديد من «شغّل بوتك».
 2. أضف التوكن إلى المتغيرات باسم `TELEGRAM_TOKEN` واتركه حساسًا.
 3. اضغط «ادفع وانشر». نثبّت المكتبات بالأمر `uv pip install -r requirements.txt`، ونشغّل البوت بالأمر `python main.py`، على Python 3.12. وكل push على `main` ينشر بوتك من جديد.
 
@@ -24,9 +24,9 @@ A minimal Telegram bot in Python: it greets you on `/start` and echoes every mes
 
 ## Run it on Serverk
 
-[Deploy it on Serverk](https://serverk.gg/bots/create?template=telegram-python)
+[![Deploy on Serverk](https://serverk.gg/button.svg)](https://serverk.gg/bots/create?template=telegram-python)
 
-1. Open the link above, or press **Use this template** on GitHub and pick your new repository on **Run your bot**.
+1. Press the button above, or press **Use this template** on GitHub and pick your new repository on **Run your bot**.
 2. Add the token to your variables as `TELEGRAM_TOKEN`, marked sensitive.
 3. Press **Pay and deploy**. We install the dependencies with `uv pip install -r requirements.txt` and start the bot with `python main.py`, on Python 3.12. Every push to `main` deploys your bot again.
 
@@ -42,9 +42,9 @@ Guides: [Run your bot for the first time](https://serverk.gg/bots/bot-python/gui
 
 ## مع أداة ذكاء اصطناعي / With an AI tool
 
-يشرح ملف `AGENTS.md` في هذا الريبو ما سبق لأداة الذكاء الاصطناعي التي تكتب بها بوتك. وتعلّمها `use-serverk` من Serverk طريقة النشر كاملة، ونذكر ريبو `use-serverk` ضمن `serverkgg` في https://serverk.gg/llms.txt فور نشره. لتنشر الأداة بوتك وتضبط متغيراته وتقرأ سجل النشر، اربطها بواجهة MCP على `https://api.serverk.gg/mcp`.
+يشرح ملف `AGENTS.md` في هذا الريبو ما سبق لأداة الذكاء الاصطناعي التي تكتب بها بوتك. وتعلّمها `serverk-bot` من Serverk طريقة النشر كاملة، وريبوها هو https://github.com/serverkgg/serverk-skills. لتنشر الأداة بوتك وتضبط متغيراته وتقرأ سجل النشر، اربطها بواجهة MCP على `https://api.serverk.gg/mcp`.
 
-`AGENTS.md` tells the AI tool you write your bot with all of the above. Serverk's `use-serverk` skill teaches it the whole workflow; its repository under `serverkgg` is named in https://serverk.gg/llms.txt once published. To let it deploy your bot, set its variables and read the deployment log, connect it to the Serverk MCP server at `https://api.serverk.gg/mcp`.
+`AGENTS.md` tells the AI tool you write your bot with all of the above. Serverk's `serverk-bot` skill teaches it the whole workflow; its repository is https://github.com/serverkgg/serverk-skills. To let it deploy your bot, set its variables and read the deployment log, connect it to the Serverk MCP server at `https://api.serverk.gg/mcp`.
 
 ## على جهازك / On your machine
 

@@ -25,9 +25,11 @@ import {
 	createBotReadiness,
 	DEPLOYMENT_ID_PATTERN,
 	DEPLOYMENT_LINE,
+	DEPLOYMENT_STAGE_LINE,
 	DEPLOYMENT_STATE_FILE,
 	DETECT_TABLE,
 	deploymentLine,
+	deploymentStageLine,
 	detect,
 	detectWantedFiles,
 	parseServerkJson,
@@ -682,6 +684,10 @@ describe("running the launcher", () => {
 		return botDeploymentStateSchema.parse(JSON.parse(readFileSync(join(app, DEPLOYMENT_STATE_FILE), "utf8")));
 	};
 
+	const stagesOf = (lines: string[]) => {
+		return lines.filter((line) => DEPLOYMENT_STAGE_LINE.test(line));
+	};
+
 	beforeEach(() => {
 		root = mkdtempSync(join(tmpdir(), "bot-python-launcher-"));
 		app = join(root, "app");
@@ -782,6 +788,50 @@ describe("running the launcher", () => {
 		expect(historyCount()).toBe(2);
 	});
 
+	it("prints each stage of a deployment once, the way the bridge reads it, and none on a start with nothing to deploy", () => {
+		place(
+			zipOf("one", {
+				"main.py": "run()",
+			}),
+			"snap_1",
+		);
+
+		const deployed = launch({
+			SERVERK_SNAPSHOT_ID: "snap_1",
+			SERVERK_DEPLOYMENT_ID: "dep_1",
+		});
+
+		expect(deployed.code).toBe(0);
+		expect(stagesOf(deployed.lines)).toEqual([
+			deploymentStageLine("dep_1", BotDeploymentStage.Snapshot),
+			deploymentStageLine("dep_1", BotDeploymentStage.Install),
+			deploymentStageLine("dep_1", BotDeploymentStage.Start),
+		]);
+		expect(deployed.lines.indexOf(deploymentStageLine("dep_1", BotDeploymentStage.Start))).toBeLessThan(
+			deployed.lines.findIndex((line) => READY_LINE.test(line)),
+		);
+
+		const again = launch({
+			SERVERK_SNAPSHOT_ID: "snap_1",
+			SERVERK_DEPLOYMENT_ID: "dep_1",
+		});
+
+		expect(again.code).toBe(0);
+		expect(stagesOf(again.lines)).toEqual([]);
+
+		const installMode = launch(
+			{
+				SERVERK_SNAPSHOT_ID: "snap_1",
+				SERVERK_DEPLOYMENT_ID: "dep_2",
+			},
+			[
+				"install",
+			],
+		);
+
+		expect(stagesOf(installMode.lines)).toEqual([]);
+	});
+
 	it("ends a failed deployment with the failure line and records it", () => {
 		const { code, lines } = launch({
 			SERVERK_SNAPSHOT_ID: "snap_missing",
@@ -789,6 +839,9 @@ describe("running the launcher", () => {
 		});
 
 		expect(code).toBe(1);
+		expect(stagesOf(lines)).toEqual([
+			deploymentStageLine("dep_9", BotDeploymentStage.Snapshot),
+		]);
 		expect(lines.at(-1)).toBe("serverk: deployment dep_9 failed: snapshot: snapshot snap_missing is not on this bot");
 		expect(stamp()).toMatchObject({
 			deployment: "dep_9",
@@ -1294,6 +1347,11 @@ describe("running the launcher", () => {
 
 		expect(code).toBe(0);
 		expect(lines).toContain("parent-token-0");
+		expect(stagesOf(lines)).toEqual([
+			deploymentStageLine("dep_1", BotDeploymentStage.Sync),
+			deploymentStageLine("dep_1", BotDeploymentStage.Install),
+			deploymentStageLine("dep_1", BotDeploymentStage.Start),
+		]);
 		expect(stamp()).toMatchObject({
 			deployment: "dep_1",
 			outcome: "ready",

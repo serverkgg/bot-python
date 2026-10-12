@@ -4,6 +4,8 @@ On "Run your bot", pick **GitHub repository** and install the Serverk app on you
 
 Private repositories work without giving us any token: the app hands us short-lived read access during a deployment only, and your bot never sees it.
 
+A public repository needs no app: open `https://serverk.gg/bots/create?repo=owner/name` with your bot's repository in place of `owner/name` and deploy it right away. That bot starts with deploys on push off; connect GitHub from the Git section and pick the same repository to turn them on.
+
 ## Every push deploys your bot
 
 Turn on **Deploy on every push** in the Git section of your bot's settings, and every push to the linked branch deploys your bot on its own. Each deployment pins exactly one commit, so you always know which code is running.
