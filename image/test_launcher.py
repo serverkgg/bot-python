@@ -1303,6 +1303,49 @@ class LinesTest(unittest.TestCase):
         self.assertEqual(printed.getvalue(), "serverk: deployment dep_1 failed: install: nope\n")
 
 
+
+class ExposureTest(unittest.TestCase):
+    ARGV = ["sh", "-c", "exec python main.py"]
+
+    def announced(self, env):
+        printed = io.StringIO()
+
+        with contextlib.redirect_stdout(printed):
+            launcher.announce_start(env, self.ARGV)
+
+        return printed.getvalue().splitlines()
+
+    def test_prints_the_web_address_and_each_raw_port_right_before_the_start_line(self):
+        self.assertEqual(
+            self.announced(
+                {
+                    "PORT": "8080",
+                    "SERVERK_WEB_URL": "https://mybot.srvk.gg",
+                    "SERVERK_WEB_HOST": "mybot.srvk.gg",
+                    "SERVERK_PORT_1": "29004",
+                    "SERVERK_PORT_2": "30004",
+                }
+            ),
+            [
+                "serverk: web address https://mybot.srvk.gg on port 8080",
+                "serverk: port 1 at mybot.srvk.gg:29004",
+                "serverk: port 2 at mybot.srvk.gg:30004",
+                "serverk: start command: sh -c exec python main.py",
+                launcher.READY_LINE,
+            ],
+        )
+
+    def test_names_a_raw_port_by_its_number_alone_without_a_web_address(self):
+        self.assertEqual(launcher.exposure_lines({"SERVERK_PORT_2": "30004"}), ["port 2 on 30004"])
+
+    def test_prints_nothing_more_while_web_and_the_ports_are_off(self):
+        self.assertEqual(
+            self.announced({"PORT": "3000"}),
+            ["serverk: start command: sh -c exec python main.py", launcher.READY_LINE],
+        )
+        self.assertEqual(launcher.exposure_lines({"SERVERK_WEB_URL": "https://mybot.srvk.gg"}), [])
+
+
 class EnterStageTest(unittest.TestCase):
     def enter(self, request, stage):
         context = {"request": request, "stage": launcher.STAGE_SYNC}

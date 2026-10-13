@@ -30,6 +30,15 @@
 
 لا يتوقف python-telegram-bot عند هذا السطر، بل يطبعه ويستمر بجانب النسخة الأخرى. التوكن الواحد يشغّل بوتًا واحدًا فقط في الوقت نفسه، فوقّف النسخة الأخرى، مثل نسخة على جهازك، أو أرسل `/revoke` إلى BotFather لتأخذ توكنًا جديدًا، وحدّثه في المتغيرات، ثم انشر من جديد.
 
+## الـ webhook مضبوط على التوكن {#webhook-active}
+
+- في aiogram: `aiogram.exceptions.TelegramConflictError: Telegram server says - Conflict: can't use getUpdates method while webhook is active; use deleteWebhook to delete the webhook first`
+
+يرد تيليقرام بهذا عندما يسحب بوتك الرسائل بالـ polling وعلى توكنه webhook مضبوط من استضافة سابقة أو من وقت كان عنوان الويب فيه مفعّلًا. اختر إحدى الطريقتين:
+
+- انقل كودك إلى الـ webhook وفعّل عنوان الويب، كما في شرح «عنوان الويب والمنافذ لبوتك».
+- أو احذف الـ webhook: أضف `await bot.delete_webhook()` قبل `dp.start_polling(bot)`، أو افتح `https://api.telegram.org/botTOKEN/deleteWebhook` في المتصفح مرة واحدة بعد وضع توكنك مكان `TOKEN`، ثم شغّل بوتك من جديد.
+
 ## مكتبة ناقصة {#missing-dependency}
 
 - `ModuleNotFoundError: No module named 'discord'`
@@ -74,6 +83,17 @@
 - أو السطر `error code: 1015`
 
 عطه بضع دقائق قبل أن تشغّله من جديد، وراجع الكود الذي يرسل الطلبات في حلقة متكررة.
+
+## بوتك لا يستقبل على عنوان الويب {#web-not-listening}
+
+عنوان الويب مفعّل، لكن لم يرد شيء على المنفذ الموجود في `PORT`، فتنبّهك صفحة بوتك، ويعرض عنوانه صفحة «البوت لا يستقبل الطلبات حاليًا». اجعل بوتك يستمع على `0.0.0.0` وعلى `int(os.environ["PORT"])`، لا على `localhost` أو `127.0.0.1` ولا على رقم ثابت مثل `5000`، ثم انشر من جديد. ويوضح شرح «عنوان الويب والمنافذ لبوتك» الطريقة لكل مكتبة. وإذا كان بوتك لا يحتاج عنوان الويب، فأوقفه من **الإدارة**.
+
+## بوتك يفتح المنفذ نفسه مرتين {#port-busy}
+
+- `OSError: [Errno 98] Address already in use`
+- `OSError: [Errno 98] error while attempting to bind on address ('0.0.0.0', 8080): address already in use`
+
+لا يستخدم منافذ بوتك أي برنامج آخر، فهذا السطر يعني أن كودك يفتح المنفذ نفسه مرتين، مثل سيرفر لصفحاتك وسيرفر الـ webhook كلاهما على `PORT`، أو سيرفر keep-alive قديم بجانبهما. افتح سيرفرًا واحدًا على `PORT` وأضف إليه كل المسارات، ثم انشر من جديد.
 
 ## توقف بوتك برمز الخروج `137` {#oom-kill}
 

@@ -18,7 +18,7 @@ A minimal Telegram bot in Python: it greets you on `/start` and echoes every mes
 
 - يصل كل متغير إلى بوتك بالاسم الذي حفظته به تمامًا، دون بادئة أو أي تغيير، ويقرؤه الكود من `os.environ["TELEGRAM_TOKEN"]`.
 - لا يصل ملف `.env` إلى Serverk أبدًا: يستبعده `.gitignore` من الريبو، ونحذفه من أي zip ترفعه ونقترح أسماء متغيراته دون قيمها. يحمل `.env.example` الأسماء فقط.
-- يستقبل البوت الرسائل بطريقة polling، لأن البوت على Serverk لا يفتح أي منفذ. والتوكن الواحد يشغّل بوتًا واحدًا، فأوقف أي نسخة أخرى تعمل بالتوكن نفسه قبل النشر.
+- يستقبل البوت الرسائل بطريقة polling. ولاستخدام الـ webhook، فعّل عنوان الويب من **الإدارة**، فيصل إلى بوتك `PORT` و `SERVERK_WEB_URL` و `SERVERK_WEB_HOST`. والتوكن الواحد يشغّل بوتًا واحدًا، فأوقف أي نسخة أخرى شغّالة بالتوكن نفسه قبل النشر.
 
 الشروحات: [شغّل بوتك أول مرة](https://serverk.gg/bots/bot-python/guides/getting-started)، [أضف التوكن والمتغيرات](https://serverk.gg/bots/bot-python/guides/environment-variables)، [أين تجد توكن بوت تيليقرام](https://serverk.gg/bots/bot-python/guides/telegram-token).
 
@@ -36,7 +36,7 @@ A minimal Telegram bot in Python: it greets you on `/start` and echoes every mes
 
 - Every variable reaches your bot under exactly the name you saved it with, with no prefix and no renaming. The code reads it from `os.environ["TELEGRAM_TOKEN"]`.
 - A `.env` file never reaches Serverk: `.gitignore` keeps it out of the repository, and we remove it from any zip you upload and suggest its variable names without the values. `.env.example` holds the names only.
-- The bot receives messages by long polling, because a bot on Serverk opens no port. One token runs one bot, so stop any other copy that uses the same token before you deploy.
+- The bot receives messages by long polling. For a webhook, turn on the web address in **Manage**: your bot then gets `PORT`, `SERVERK_WEB_URL` and `SERVERK_WEB_HOST`. One token runs one bot, so stop any other copy that uses the same token before you deploy.
 
 Guides: [Run your bot for the first time](https://serverk.gg/bots/bot-python/guides/getting-started), [Add the token and your variables](https://serverk.gg/bots/bot-python/guides/environment-variables), [Where to find your Telegram bot token](https://serverk.gg/bots/bot-python/guides/telegram-token).
 

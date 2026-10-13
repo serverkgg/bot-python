@@ -29,7 +29,55 @@ container:
     bootBudgetMinutes: 15
     shmMb: 64
     pidsLimit: 256
-  ports: []
+  ports:
+    - key: web
+      containerPort: 8080
+      protocol: tcp
+      web: true
+      hostRange:
+        default: 31000
+        min: 31000
+        max: 31999
+      activeWhen:
+        - variable: BOT_WEB
+          values:
+            - "on"
+    - key: port1
+      containerPort: 29000
+      protocol: tcp+udp
+      mirror: true
+      name:
+        ar: المنفذ 1
+        en: Port 1
+      hint:
+        ar: يستقبل TCP و UDP على الرقم نفسه، دون شهادة. ويقرأ بوتك رقمه من SERVERK_PORT_1.
+        en: Takes TCP and UDP on the same number, with no certificate. Your bot reads the number from SERVERK_PORT_1.
+      hostRange:
+        default: 29000
+        min: 29000
+        max: 29999
+      activeWhen:
+        - variable: BOT_PORT_1
+          values:
+            - "on"
+    - key: port2
+      containerPort: 30000
+      protocol: tcp+udp
+      mirror: true
+      name:
+        ar: المنفذ 2
+        en: Port 2
+      hint:
+        ar: يستقبل TCP و UDP على الرقم نفسه، دون شهادة. ويقرأ بوتك رقمه من SERVERK_PORT_2.
+        en: Takes TCP and UDP on the same number, with no certificate. Your bot reads the number from SERVERK_PORT_2.
+      hostRange:
+        default: 30000
+        min: 30000
+        max: 30999
+      activeWhen:
+        - variable: BOT_PORT_2
+          values:
+            - "on"
 
 environment:
   vault: true
@@ -271,6 +319,21 @@ guides:
     bodyPath:
       ar: guides/data-and-backups/ar.md
       en: guides/data-and-backups/en.md
+  - id: web-address
+    title:
+      ar: عنوان الويب والمنافذ لبوتك
+      en: Your bot's web address and ports
+    summary:
+      ar: فعّل لبوتك عنوان HTTPS ومنفذين لـ TCP و UDP، لاستقبال الـ webhook من تيليقرام وتفاعلات ديسكورد وتقديم صفحاتك.
+      en: Turn on an HTTPS address and two TCP and UDP ports for your bot, for Telegram webhooks, Discord interactions and your own pages.
+    tags:
+      - deploy
+    surfaces:
+      - overview
+      - console
+    bodyPath:
+      ar: guides/web-address/ar.md
+      en: guides/web-address/en.md
   - id: discord-token
     title:
       ar: توكن بوت ديسكورد والـ Intents والصلاحيات

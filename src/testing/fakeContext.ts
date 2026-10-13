@@ -5,6 +5,7 @@ export const SERVER_CODE = "bt7k2m9q4x";
 export interface FakeContextOptions {
 	variables?: Record<string, string>;
 	secrets?: Record<string, string>;
+	ports?: Record<string, number>;
 	files?: Record<string, string>;
 	memoryMb?: number;
 	running?: boolean;
@@ -26,6 +27,9 @@ export const fakeContext = (options: FakeContextOptions = {}) => {
 	};
 	const secrets: Record<string, string> = {
 		...options.secrets,
+	};
+	const ports: Record<string, number> = {
+		...options.ports,
 	};
 	const stored = new Map(Object.entries(options.files ?? {}));
 	const followers: FakeFollower[] = [];
@@ -49,6 +53,15 @@ export const fakeContext = (options: FakeContextOptions = {}) => {
 		},
 		secrets() {
 			return secrets;
+		},
+		port(key: string) {
+			const port = ports[key];
+
+			if (port === undefined) {
+				throw new Error(`no port named ${key}`);
+			}
+
+			return port;
 		},
 		files: {
 			async exists(path: string) {

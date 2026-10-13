@@ -2,6 +2,9 @@ import { describe, expect, it } from "bun:test";
 import { BridgeLifecycleSubject } from "@serverkgg/bridge";
 import {
 	BOT_PLATFORM,
+	BOT_PORT_1_KEY,
+	BOT_PORT_2_KEY,
+	BOT_WEB_PORT_KEY,
 	BotDeploymentOutcome,
 	BotDeploymentSource,
 	BotDeploymentStage,
@@ -18,8 +21,13 @@ import {
 	LAUNCHER_REPO_REF,
 	LAUNCHER_REPO_URL,
 	LAUNCHER_STATE_DIR,
+	PORT,
 	REPO_REF,
 	REPO_URL,
+	SERVERK_PORT_1,
+	SERVERK_PORT_2,
+	SERVERK_WEB_HOST,
+	SERVERK_WEB_URL,
 } from "@serverkgg/bridge/bot";
 import { BridgeCrashCause, BridgeCrashPhase, BridgeEventName } from "@serverkgg/bridge/protocol";
 import { STATE_DIR } from "../shared";
@@ -107,6 +115,55 @@ describe("the bot process environment", () => {
 
 		expect(environment.BOT_PLATFORM).toBeUndefined();
 		expect(environment.SERVERK_BOT).toBe("1");
+	});
+
+	it("hands the bot PORT and its web address only while Web is on, and each raw port only while it is on", async () => {
+		const off = await environmentOf(
+			fakeContext({
+				variables: {
+					PORT: "3000",
+				},
+			}).context,
+		);
+
+		expect(off[PORT]).toBe("3000");
+		expect(off[SERVERK_WEB_URL]).toBeUndefined();
+		expect(off[SERVERK_WEB_HOST]).toBeUndefined();
+		expect(off[SERVERK_PORT_1]).toBeUndefined();
+		expect(off[SERVERK_PORT_2]).toBeUndefined();
+
+		const on = await environmentOf(
+			fakeContext({
+				variables: {
+					PORT: "3000",
+					[SERVERK_WEB_URL]: "https://mybot.srvk.gg",
+				},
+				ports: {
+					[BOT_WEB_PORT_KEY]: 8080,
+					[BOT_PORT_2_KEY]: 30_004,
+				},
+			}).context,
+		);
+
+		expect(on).toMatchObject({
+			[PORT]: "8080",
+			[SERVERK_WEB_URL]: "https://mybot.srvk.gg",
+			[SERVERK_WEB_HOST]: "mybot.srvk.gg",
+			[SERVERK_PORT_2]: "30004",
+		});
+		expect(on[SERVERK_PORT_1]).toBeUndefined();
+
+		const raw = await environmentOf(
+			fakeContext({
+				ports: {
+					[BOT_PORT_1_KEY]: 29_004,
+				},
+			}).context,
+		);
+
+		expect(raw[SERVERK_PORT_1]).toBe("29004");
+		expect(raw[PORT]).toBeUndefined();
+		expect(raw[SERVERK_WEB_URL]).toBeUndefined();
 	});
 
 	it("starts the launcher with python in isolated mode, so no PYTHON variable reaches it", async () => {

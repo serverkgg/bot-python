@@ -30,6 +30,15 @@ Turn on the intents your code asks for on the Bot page of the Developer Portal, 
 
 python-telegram-bot doesn't stop on this line: it prints it and keeps going beside the other copy. One token runs only one bot at a time, so stop the other copy, such as one on your computer, or send `/revoke` to BotFather for a new token, update it in your variables, then redeploy.
 
+## A webhook is set on the token {#webhook-active}
+
+- aiogram: `aiogram.exceptions.TelegramConflictError: Telegram server says - Conflict: can't use getUpdates method while webhook is active; use deleteWebhook to delete the webhook first`
+
+Telegram answers this when your bot pulls messages by polling while its token still has a webhook set, from an old host or from when the web address was on. Pick one:
+
+- Move your code to the webhook and turn on the web address, as the guide "Your bot's web address and ports" shows.
+- Or delete the webhook: add `await bot.delete_webhook()` before `dp.start_polling(bot)`, or open `https://api.telegram.org/botTOKEN/deleteWebhook` in your browser once with your token in place of `TOKEN`, then start your bot again.
+
 ## A library is missing {#missing-dependency}
 
 - `ModuleNotFoundError: No module named 'discord'`
@@ -74,6 +83,17 @@ Python 3.13 and later no longer include `audioop`. Set Python 3.12 in `.python-v
 - Or the line `error code: 1015`
 
 Give it a few minutes before you start it again, and check the code that sends requests in a loop.
+
+## Your bot isn't listening on its web address {#web-not-listening}
+
+The web address is on, but nothing answered on the port in `PORT`, so your bot's page warns you and the address shows "This bot isn't answering right now". Make your bot listen on `0.0.0.0` and `int(os.environ["PORT"])`, not on `localhost` or `127.0.0.1` and not on a fixed number such as `5000`, then redeploy. The guide "Your bot's web address and ports" shows how for each library. If your bot doesn't need the web address, turn it off in **Manage**.
+
+## Your bot opens the same port twice {#port-busy}
+
+- `OSError: [Errno 98] Address already in use`
+- `OSError: [Errno 98] error while attempting to bind on address ('0.0.0.0', 8080): address already in use`
+
+Nothing else uses your bot's ports, so this line means your code opens the same port twice, such as a server for your pages and the webhook server both on `PORT`, or an old keep-alive server beside them. Open one server on `PORT` and add every route to it, then redeploy.
 
 ## Your bot stopped with exit code `137` {#oom-kill}
 

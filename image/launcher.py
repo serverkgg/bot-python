@@ -62,6 +62,14 @@ LAUNCHER_KEYS = (
 
 RESUME_KEY = "SERVERK_LAUNCH_RESUME"
 
+WEB_URL_KEY = "SERVERK_WEB_URL"
+
+WEB_HOST_KEY = "SERVERK_WEB_HOST"
+
+WEB_PORT_KEY = "PORT"
+
+RAW_PORT_KEYS = (("port 1", "SERVERK_PORT_1"), ("port 2", "SERVERK_PORT_2"))
+
 BUILT_IN_TABLE = {
     "version": DETECT_TABLE_VERSION,
     "procfile": {
@@ -420,6 +428,32 @@ def deployment_line(deployment, outcome, commit=None, stage=None, detail=None):
         return f"serverk: deployment {deployment} ready{at}"
 
     return f"serverk: deployment {deployment} failed: {stage}: {one_line(detail)}"
+
+
+def exposure_lines(env):
+    lines = []
+    url = text(env.get(WEB_URL_KEY))
+    port = text(env.get(WEB_PORT_KEY))
+    host = text(env.get(WEB_HOST_KEY))
+
+    if url and port:
+        lines.append(f"web address {url} on port {port}")
+
+    for label, key in RAW_PORT_KEYS:
+        value = text(env.get(key))
+
+        if value:
+            lines.append(f"{label} at {host}:{value}" if host else f"{label} on {value}")
+
+    return lines
+
+
+def announce_start(env, argv):
+    for line in exposure_lines(env):
+        say(line)
+
+    say(f"start command: {' '.join(argv)}")
+    print(READY_LINE, flush=True)
 
 
 def bot_environment(environment):
@@ -2339,8 +2373,7 @@ def launch(mode, context):
     program, *args = start["argv"]
     exec_env = venv_environment(bot_environment(env), project_dir)
 
-    say(f"start command: {' '.join(start['argv'])}")
-    print(READY_LINE, flush=True)
+    announce_start(env, start["argv"])
 
     os.chdir(project_dir)
     os.execve(executable_of(project_dir, program), [program, *args], exec_env)

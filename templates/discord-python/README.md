@@ -19,6 +19,7 @@ A minimal Discord bot in Python: a `/ping` command that answers with the latency
 - يصل كل متغير إلى بوتك بالاسم الذي حفظته به تمامًا، دون بادئة أو أي تغيير، ويقرؤه الكود من `os.environ["DISCORD_TOKEN"]`.
 - لا يصل ملف `.env` إلى Serverk أبدًا: يستبعده `.gitignore` من الريبو، ونحذفه من أي zip ترفعه ونقترح أسماء متغيراته دون قيمها. يحمل `.env.example` الأسماء فقط.
 - يستخدم البوت `discord.Intents.default()`، ولا تشمل أيًّا من الـ Intents المميزة. إذا أضفت أحدها مثل Message Content ففعّله أولًا في Developer Portal، وإلا رفض ديسكورد تسجيل دخول البوت.
+- لا يفتح البوت أي منفذ حتى تفعّل عنوان الويب من **الإدارة**، فيصل إليه `PORT` و `SERVERK_WEB_URL` و `SERVERK_WEB_HOST` لتفاعلات ديسكورد عبر HTTP أو لصفحاتك.
 
 الشروحات: [شغّل بوتك أول مرة](https://serverk.gg/bots/bot-python/guides/getting-started)، [أضف التوكن والمتغيرات](https://serverk.gg/bots/bot-python/guides/environment-variables)، [أين تجد توكن بوت ديسكورد](https://serverk.gg/bots/bot-python/guides/discord-token).
 
@@ -37,6 +38,7 @@ A minimal Discord bot in Python: a `/ping` command that answers with the latency
 - Every variable reaches your bot under exactly the name you saved it with, with no prefix and no renaming. The code reads it from `os.environ["DISCORD_TOKEN"]`.
 - A `.env` file never reaches Serverk: `.gitignore` keeps it out of the repository, and we remove it from any zip you upload and suggest its variable names without the values. `.env.example` holds the names only.
 - The bot uses `discord.Intents.default()`, which holds no privileged intent. If you add one such as Message Content, turn it on in the Developer Portal first, or Discord refuses the bot's login.
+- The bot opens no port until you turn on the web address in **Manage**: it then gets `PORT`, `SERVERK_WEB_URL` and `SERVERK_WEB_HOST`, for Discord interactions over HTTP or your own pages.
 
 Guides: [Run your bot for the first time](https://serverk.gg/bots/bot-python/guides/getting-started), [Add the token and your variables](https://serverk.gg/bots/bot-python/guides/environment-variables), [Where to find your Discord bot token](https://serverk.gg/bots/bot-python/guides/discord-token).
 

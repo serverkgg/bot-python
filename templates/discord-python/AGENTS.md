@@ -8,6 +8,7 @@ This repository is a Discord bot in Python with discord.py, deployed on Serverk 
 - `serverk.json` declares the runtime, platform, framework and variables. One invalid field rejects the whole file.
 - Keep the `Logged in as` line: Serverk marks the bot ready when it prints it, or after 20 seconds alive.
 - The bot uses `discord.Intents.default()`, which holds no privileged intent. A privileged intent (`message_content`, `members`, `presences`) must be turned on in the Developer Portal first, or the login fails with `PrivilegedIntentsRequired`.
+- The bot publishes no port until the web address is turned on in the bot's Manage page: the bot then gets `PORT`, `SERVERK_WEB_URL` and `SERVERK_WEB_HOST`, and must listen on `0.0.0.0` and `PORT`.
 
 ## Variables
 

@@ -11,9 +11,9 @@ On Telegram, one token runs only one bot at a time: the second copy gets `409 Co
 
 ## What you don't need here
 
-- **Keep-alive**: a small web server such as `keep_alive.py` with Flask, visited by a service such as UptimeRobot. Your bot publishes no port here, so nothing outside can reach it, and we keep your bot running without it.
+- **Keep-alive**: a small web server such as `keep_alive.py` with Flask, visited by a service such as UptimeRobot. We keep your bot running without it, and nothing outside reaches your bot unless you turn on its web address or a port.
 - **pm2, nohup and screen**: start your bot directly, such as `python main.py`. We restart it ourselves after a crash, and we only see the crash when your bot's own process stops.
-- **Telegram webhooks**: no webhook can reach your bot here, so use polling, such as `app.run_polling()` in python-telegram-bot, as our template does.
+- **Telegram webhooks**: polling is enough, such as `app.run_polling()` in python-telegram-bot, as our template does. To use a webhook, turn on the web address, as the guide "Your bot's web address and ports" shows.
 
 ## Move your variables
 

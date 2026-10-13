@@ -30,11 +30,13 @@ Some names belong to Serverk, so you can't add them as variables:
 
 - Any name that starts with `SERVERK_`.
 - The names that carry your deployment settings: `REPO_URL`, `REPO_REF`, `REPO_BRANCH`, `START_COMMAND`, `INSTALL_COMMAND`, `ROOT_DIRECTORY`, `DEPLOYMENT_ID`, `SNAPSHOT_ID`, `BOT_PLATFORM` and `GIT_TOKEN`. Change these from your bot's settings instead.
+- `BOT_WEB`, `BOT_PORT_1` and `BOT_PORT_2`, the switches of the web address and the two ports. Turn those on in **Manage** instead.
 - `PATH`, `HOME`, `TZ`, `VIRTUAL_ENV` and `PYTHONUNBUFFERED`, which your bot needs to run.
 
 We give your bot these ourselves:
 
 - `SERVERK_BOT` set to `1`, and `SERVERK_SERVER_CODE`, your bot's code.
 - `BOT_PLATFORM`: `discord` or `telegram`.
+- `PORT`, `SERVERK_WEB_URL` and `SERVERK_WEB_HOST` while the web address is on, and `SERVERK_PORT_1` and `SERVERK_PORT_2` while that port is on. The guide "Your bot's web address and ports" explains them.
 
 > [!note] Your variables reach the dependency install too, so if you use a private package index, add `UV_DEFAULT_INDEX` to your variables and mark it sensitive. A `Pipfile` takes its index from its own `[[source]]` section instead. If the install command you set runs `pip`, add `PIP_INDEX_URL` instead.

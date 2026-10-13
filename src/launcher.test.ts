@@ -33,6 +33,7 @@ import {
 	detect,
 	detectWantedFiles,
 	parseServerkJson,
+	platformEnvironment,
 	REPO_BRANCH_PATTERN,
 	REPO_REF_PATTERN,
 	REPO_URL_PATTERN,
@@ -61,6 +62,22 @@ const SHA = "0123456789abcdef0123456789abcdef01234567";
 const REMOTE = "https://example.test/bots/sample";
 
 const RESUME_KEY = "SERVERK_LAUNCH_RESUME";
+
+const EXPOSED = platformEnvironment("bt7k2m9q4x", null, {
+	web: 8080,
+	webUrl: "https://mybot.srvk.gg",
+	port1: 29_004,
+	port2: 30_004,
+});
+
+const RAW_ONLY = platformEnvironment("bt7k2m9q4x", null, {
+	web: null,
+	webUrl: null,
+	port1: null,
+	port2: 30_004,
+});
+
+const QUIET = platformEnvironment("bt7k2m9q4x", null);
 
 const INSTALL_ONLY_KEYS = [
 	"CI",
@@ -264,6 +281,9 @@ describe("the python launcher", () => {
 				`'readyLine': launcher.deployment_line('dep_1', launcher.OUTCOME_READY, commit=${JSON.stringify(SHA)}),`,
 				"'plainLine': launcher.deployment_line('dep_1', launcher.OUTCOME_READY),",
 				"'failedLine': launcher.deployment_line('dep_1', launcher.OUTCOME_FAILED, stage='install', detail='pip\\n  failed'),",
+				`'exposed': launcher.exposure_lines(${JSON.stringify(EXPOSED)}),`,
+				`'rawOnly': launcher.exposure_lines(${JSON.stringify(RAW_ONLY)}),`,
+				`'quiet': launcher.exposure_lines(${JSON.stringify(QUIET)}),`,
 				"}))",
 			].join("\n"),
 		);
@@ -305,6 +325,15 @@ describe("the python launcher", () => {
 				detail: "pip\n  failed",
 			}),
 		);
+		expect(answer.exposed).toEqual([
+			"web address https://mybot.srvk.gg on port 8080",
+			"port 1 at mybot.srvk.gg:29004",
+			"port 2 at mybot.srvk.gg:30004",
+		]);
+		expect(answer.rawOnly).toEqual([
+			"port 2 on 30004",
+		]);
+		expect(answer.quiet).toEqual([]);
 	});
 });
 
@@ -830,6 +859,58 @@ describe("running the launcher", () => {
 		);
 
 		expect(stagesOf(installMode.lines)).toEqual([]);
+	});
+
+	it("prints the web address and each raw port right before the start line, and none of them while they are off", () => {
+		place(
+			zipOf("one", {
+				"main.py": "one()",
+			}),
+			"snap_1",
+		);
+
+		const deployment = {
+			SERVERK_SNAPSHOT_ID: "snap_1",
+			SERVERK_DEPLOYMENT_ID: "dep_1",
+		};
+		const off = launch({
+			...deployment,
+			PORT: "3000",
+		});
+
+		expect(off.code).toBe(0);
+		expect(off.lines.filter((line) => /^serverk: (?:web address|port \d) /.test(line))).toEqual([]);
+
+		const on = launch({
+			...deployment,
+			PORT: "8080",
+			SERVERK_WEB_URL: "https://mybot.srvk.gg",
+			SERVERK_WEB_HOST: "mybot.srvk.gg",
+			SERVERK_PORT_1: "29004",
+			SERVERK_PORT_2: "30004",
+		});
+
+		expect(on.code).toBe(0);
+		expect(on.lines.slice(-6)).toEqual([
+			"serverk: web address https://mybot.srvk.gg on port 8080",
+			"serverk: port 1 at mybot.srvk.gg:29004",
+			"serverk: port 2 at mybot.srvk.gg:30004",
+			"serverk: start command: sh -c exec echo the bot ran",
+			"serverk: bot process starting",
+			"the bot ran",
+		]);
+
+		const raw = launch({
+			...deployment,
+			SERVERK_PORT_1: "29004",
+		});
+
+		expect(raw.lines.slice(-4)).toEqual([
+			"serverk: port 1 on 29004",
+			"serverk: start command: sh -c exec echo the bot ran",
+			"serverk: bot process starting",
+			"the bot ran",
+		]);
 	});
 
 	it("ends a failed deployment with the failure line and records it", () => {

@@ -8,6 +8,8 @@ Every line that starts with `serverk:` comes from us, not from your bot, and sho
 - `installing dependencies ...`: we install the dependencies.
 - `dependencies are up to date`: nothing changed, so we didn't reinstall.
 - `deployment ... ready at ...`: the deployment succeeded.
+- `web address ... on port ...`: your bot's web address and the port it must listen on, while the web address is on.
+- `port 1 ...` and `port 2 ...`: the number of each port that's on, with the address others connect to while the web address is on.
 - `start command: ...`: the command we run your bot with.
 - `bot process starting`: your bot started, and every line after it is printed by your bot itself.
 

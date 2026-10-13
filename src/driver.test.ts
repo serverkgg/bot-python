@@ -37,7 +37,8 @@ describe("validating the driver the way the platform does", () => {
 		const output = `${result.stdout.toString()}${result.stderr.toString()}`;
 
 		expect(output).toContain("bot-python is valid");
-		expect(output).toContain("manifest: BotPackage, 0 port(s)");
+		expect(output).toContain("manifest: BotPackage, 3 port(s), 3 conditional, 2 tcp+udp");
+		expect(output).not.toContain("warning:");
 		expect(output).toContain("environment: vault on");
 		expect(output).toContain("detect: image/detect.json matches this bridge");
 		expect(output).toContain("setup: none");
