@@ -172,6 +172,10 @@
 			{
 				"file": ".tool-versions",
 				"tool": "nodejs"
+			},
+			{
+				"file": ".tool-versions",
+				"tool": "node"
 			}
 		],
 		"defaultVersion": "24"
