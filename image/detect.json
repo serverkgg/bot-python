@@ -1,5 +1,5 @@
 {
-	"version": 2,
+	"version": 3,
 	"procfile": {
 		"file": "Procfile",
 		"line": "^(worker|bot)\\s*:\\s*(.+)$",
@@ -162,6 +162,12 @@
 				"run"
 			]
 		},
+		"preDeployCommands": [
+			{
+				"file": "prisma/migrations/migration_lock.toml",
+				"command": "prisma migrate deploy"
+			}
+		],
 		"versionFiles": [
 			{
 				"file": ".nvmrc"
@@ -254,6 +260,16 @@
 		"unhonouredManagers": [
 			"poetry",
 			"pdm"
+		],
+		"preDeployCommands": [
+			{
+				"file": "alembic.ini",
+				"command": "alembic upgrade head"
+			},
+			{
+				"file": "manage.py",
+				"command": "python manage.py migrate --noinput"
+			}
 		],
 		"versionFiles": [
 			{

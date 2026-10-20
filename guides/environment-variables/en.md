@@ -8,6 +8,8 @@ bot.run(os.environ["DISCORD_TOKEN"])
 
 add a variable named `DISCORD_TOKEN`. If it reads `os.getenv("TOKEN")`, name it `TOKEN`. When you create your bot we show you the names we found in your code and in `.env.example`, so you know what to add.
 
+Your variables reach the pre-deploy command too, so a database migration can read `DATABASE_URL`, for example.
+
 ## Sensitive values are stored encrypted
 
 Turn on **Sensitive** for any secret value, such as a token or a password. A sensitive value is stored encrypted and never shown again after you save it; to change it, type a new one. Even if your bot prints it by mistake, we hide it in the console and show `••••` instead.
@@ -29,7 +31,7 @@ The change reaches your bot with the next deployment. Press **Redeploy** on your
 Some names belong to Serverk, so you can't add them as variables:
 
 - Any name that starts with `SERVERK_`.
-- The names that carry your deployment settings: `REPO_URL`, `REPO_REF`, `REPO_BRANCH`, `START_COMMAND`, `INSTALL_COMMAND`, `ROOT_DIRECTORY`, `DEPLOYMENT_ID`, `SNAPSHOT_ID`, `BOT_PLATFORM` and `GIT_TOKEN`. Change these from your bot's settings instead.
+- The names that carry your deployment settings: `REPO_URL`, `REPO_REF`, `REPO_BRANCH`, `START_COMMAND`, `INSTALL_COMMAND`, `PRE_DEPLOY_COMMAND`, `ROOT_DIRECTORY`, `DEPLOYMENT_ID`, `SNAPSHOT_ID`, `BOT_PLATFORM` and `GIT_TOKEN`. Change these from your bot's settings instead.
 - `BOT_WEB`, `BOT_PORT_1` and `BOT_PORT_2`, the switches of the web address and the two ports. Turn those on in **Manage** instead.
 - `PATH`, `HOME`, `TZ`, `VIRTUAL_ENV` and `PYTHONUNBUFFERED`, which your bot needs to run.
 

@@ -95,6 +95,13 @@ The web address is on, but nothing answered on the port in `PORT`, so your bot's
 
 Nothing else uses your bot's ports, so this line means your code opens the same port twice, such as a server for your pages and the webhook server both on `PORT`, or an old keep-alive server beside them. Open one server on `PORT` and add every route to it, then redeploy.
 
+## The pre-deploy command failed {#pre-deploy}
+
+- `serverk: pre-deploy failed:`
+- Then `serverk: deployment dep_a1b2c3d4 failed: pre-deploy:`
+
+The pre-deploy command ended with an error, so the deployment stopped before your bot started. Read the lines the command printed above these two in the console. Check that the command is right and that the variables that connect to your database, such as `DATABASE_URL`, are in your bot's variables with the right values, then redeploy. The guide "How we install and start a Python project" shows where the command comes from and how to change it.
+
 ## Your bot stopped with exit code `137` {#oom-kill}
 
 Your plan's RAM ran out while your bot was running. Nothing is printed: your bot stops at once with exit code `137`, and its page shows "Not enough RAM". Upgrade the plan for more RAM, or cut down what your bot keeps in memory.
@@ -105,6 +112,6 @@ Your plan's RAM ran out while your bot was running. Nothing is printed: your bot
 - `serverk: install failed: it ran out of memory and was stopped`
 - Then `serverk: deployment dep_a1b2c3d4 failed: install: out-of-memory`
 
-The first line ends the traceback when Python runs out of memory while your bot runs. The other two mean the install ran out of RAM. Upgrade the plan for more RAM, then redeploy.
+The first line ends the traceback when Python runs out of memory while your bot runs. The other two mean the install ran out of RAM; they say `pre-deploy` instead of `install` when the pre-deploy command ran out. Upgrade the plan for more RAM, then redeploy.
 
 > [!note] Your line isn't here? The last line of the error still says what went wrong, and the guide "Read the console and work out what happened" shows how to read it.

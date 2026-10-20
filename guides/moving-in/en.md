@@ -25,7 +25,7 @@ Put every value from your `.env` file, your Replit Secrets or your old host's va
 
 We read your dependency files, a `Procfile` and your Python version file, never your old host's own settings:
 
-- **Heroku** and **Railway**: we run the `worker:` or `bot:` line of your `Procfile`. A `web:` line isn't read. We read the Python version from `runtime.txt`.
+- **Heroku** and **Railway**: we run the `worker:` or `bot:` line of your `Procfile`. A `web:` line isn't read. We read the Python version from `runtime.txt`. A `release:` line and Railway's **Pre-deploy Command** aren't read, so put that command in the pre-deploy command in your bot's settings.
 - **Replit**: the `.replit` file isn't read.
 - **Discloud**: `discloud.config` isn't read, so if we don't find the `MAIN` file it names, put that file in your start command.
 - **A Pterodactyl host**: the startup command in its panel isn't read, and you don't need a `git pull` at start. Link GitHub and turn on **Deploy on every push** instead.
@@ -39,7 +39,7 @@ When we find no way to start your bot, set a start command in your bot's setting
 }
 ```
 
-The guide "How we install and start a Python project" lists the files we look for, in order.
+To migrate your database on every deployment, add the `preDeploy` field to it, such as `"preDeploy": "alembic upgrade head"`. The guide "How we install and start a Python project" lists the files we look for, in order.
 
 ## Bring your data
 

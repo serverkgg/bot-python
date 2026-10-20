@@ -29,7 +29,7 @@ GIT_ASKPASS = "/serverk/git-askpass"
 
 DETECT_TABLE_PATH = "/serverk/detect.json"
 
-DETECT_TABLE_VERSION = 2
+DETECT_TABLE_VERSION = 3
 
 REPO_URL_PATTERN = re.compile(r"^https://[^\s@/]+/\S+$")
 
@@ -52,6 +52,7 @@ LAUNCHER_KEYS = (
     "SERVERK_GIT_TOKEN",
     "SERVERK_START_COMMAND",
     "SERVERK_INSTALL_COMMAND",
+    "SERVERK_PRE_DEPLOY_COMMAND",
     "SERVERK_ROOT_DIRECTORY",
     "SERVERK_DEPLOYMENT_ID",
     "SERVERK_SNAPSHOT_ID",
@@ -123,6 +124,10 @@ BUILT_IN_TABLE = {
             "project": ["uv", "pip", "install", "."],
         },
         "unhonouredManagers": ["poetry", "pdm"],
+        "preDeployCommands": [
+            {"file": "alembic.ini", "command": "alembic upgrade head"},
+            {"file": "manage.py", "command": "python manage.py migrate --noinput"},
+        ],
         "versionFiles": [
             {"file": ".python-version"},
             {"file": "runtime.txt", "prefix": "python-"},
@@ -215,6 +220,8 @@ STAGE_SYNC = "sync"
 STAGE_SNAPSHOT = "snapshot"
 
 STAGE_INSTALL = "install"
+
+STAGE_PRE_DEPLOY = "pre-deploy"
 
 STAGE_START = "start"
 
@@ -344,9 +351,15 @@ ROOT_HINT = "مجلد الكود المحدد غير موجود داخل ملف�
 
 INSTALL_HINT = "تعذّر تثبيت مكتبات بوتك. راجع السطور السابقة في الكونسول، ثم صحّح requirements.txt وانشر من جديد."
 
+PRE_DEPLOY_HINT = "تعذّر تنفيذ أمر ما قبل النشر لبوتك. راجع السطور السابقة في الكونسول، وتأكد من الأمر ومن متغيرات الاتصال بقاعدة البيانات، ثم انشر من جديد."
+
 START_HINT = "لم نجد طريقة لتشغيل بوتك. أضف ملف main.py أو bot.py، أو اضبط أمر التشغيل من إعدادات البوت."
 
-MEMORY_HINT = "نفدت الرام أثناء تثبيت مكتبات بوتك، فتوقف التثبيت. ارفع الباقة للحصول على رام أكثر، ثم انشر من جديد."
+INSTALL_MEMORY_HINT = "نفدت الرام أثناء تثبيت مكتبات بوتك، فتوقف التثبيت. ارفع الباقة للحصول على رام أكثر، ثم انشر من جديد."
+
+PRE_DEPLOY_MEMORY_HINT = "نفدت الرام أثناء تنفيذ أمر ما قبل النشر، فتوقف الأمر. ارفع الباقة للحصول على رام أكثر، ثم انشر من جديد."
+
+MEMORY_HINTS = {STAGE_INSTALL: INSTALL_MEMORY_HINT, STAGE_PRE_DEPLOY: PRE_DEPLOY_MEMORY_HINT}
 
 
 class LaunchFailure(Exception):
@@ -366,7 +379,7 @@ def killed(code):
 def stage_failure(stage, hint, code, detail):
     if killed(code):
         return LaunchFailure(
-            stage, MEMORY_HINT, f"{stage} failed: it ran out of memory and was stopped", OUT_OF_MEMORY_DETAIL
+            stage, MEMORY_HINTS[stage], f"{stage} failed: it ran out of memory and was stopped", OUT_OF_MEMORY_DETAIL
         )
 
     return LaunchFailure(stage, hint, f"{stage} failed: {detail}", detail)
@@ -568,6 +581,19 @@ def version_file_of(entry):
     return spec if "key" not in spec or compiles(spec["key"]) else None
 
 
+def pre_deploy_commands_of(value):
+    if not isinstance(value, list):
+        return None
+
+    rules = [
+        {"file": entry["file"], "command": entry["command"]}
+        for entry in value
+        if isinstance(entry, dict) and text(entry.get("file")) and text(entry.get("command"))
+    ]
+
+    return rules if len(rules) == len(value) else None
+
+
 def python_rules_of(rules):
     if not isinstance(rules, dict):
         return None
@@ -575,6 +601,7 @@ def python_rules_of(rules):
     manifests = rules.get("manifests")
     commands = rules.get("installCommands")
     version_files = rules.get("versionFiles")
+    pre_deploy = pre_deploy_commands_of(rules.get("preDeployCommands"))
 
     if (
         not string_list(rules.get("startFiles"))
@@ -587,6 +614,7 @@ def python_rules_of(rules):
         or not isinstance(commands, dict)
         or not all(install_command_of(commands.get(entry["manager"])) for entry in manifests)
         or string_list(rules.get("unhonouredManagers")) is None
+        or pre_deploy is None
         or not isinstance(version_files, list)
         or not isinstance(rules.get("defaultVersion"), str)
     ):
@@ -602,6 +630,7 @@ def python_rules_of(rules):
         "manifests": [{"file": entry["file"], "manager": entry["manager"]} for entry in manifests],
         "installCommands": {entry["manager"]: commands[entry["manager"]] for entry in manifests},
         "unhonouredManagers": rules["unhonouredManagers"],
+        "preDeployCommands": pre_deploy,
         "versionFiles": specs,
         "defaultVersion": rules["defaultVersion"],
     }
@@ -802,6 +831,8 @@ def serverk_json_of(raw, table=BUILT_IN_TABLE):
     env_key = re.compile(rules["envKey"])
     start_valid, start = declared_command(document.get("start"), rules["commandLengthLimit"])
     install_valid, install = declared_command(document.get("install"), rules["commandLengthLimit"])
+    build_valid, _ = declared_command(document.get("build"), rules["commandLengthLimit"])
+    pre_deploy_valid, pre_deploy = declared_command(document.get("preDeploy"), rules["commandLengthLimit"])
     env = document.get("env")
     env_valid = env is None or (
         isinstance(env, list)
@@ -815,11 +846,13 @@ def serverk_json_of(raw, table=BUILT_IN_TABLE):
         or not optional_choice(document.get("framework"), rules["frameworks"])
         or not start_valid
         or not install_valid
+        or not build_valid
+        or not pre_deploy_valid
         or not env_valid
     ):
         return None
 
-    return {"start": start, "install": install}
+    return {"start": start, "install": install, "preDeploy": pre_deploy}
 
 
 def bot_package_of(packages):
@@ -2176,6 +2209,51 @@ def install_dependencies(context, reinstall, require_manifest):
     say("dependencies installed")
 
 
+def resolve_pre_deploy(context):
+    project_dir = context["project_dir"]
+    table = context["table"]
+    typed = text(context["env"].get("SERVERK_PRE_DEPLOY_COMMAND"))
+
+    if typed:
+        return typed
+
+    declared = serverk_json_of(read_text_replacing(os.path.join(project_dir, table["serverkJson"]["file"])), table)
+
+    if (declared or {}).get("preDeploy"):
+        return declared["preDeploy"]
+
+    carried = carried_by(source_listing(context), project_prefix(context["app_dir"], project_dir))
+
+    return next(
+        (
+            rule["command"]
+            for rule in table["python"]["preDeployCommands"]
+            if os.path.isfile(os.path.join(project_dir, rule["file"])) and carried(rule["file"])
+        ),
+        None,
+    )
+
+
+def run_pre_deploy(context):
+    command = resolve_pre_deploy(context)
+
+    if command is None:
+        return
+
+    project_dir = context["project_dir"]
+
+    enter_stage(context, STAGE_PRE_DEPLOY)
+    say(f"running the pre-deploy command: {command}")
+
+    run_env = venv_environment(bot_environment(context["env"]), project_dir)
+    code, detail, _ = run(shell_command(command), project_dir, run_env)
+
+    if code != 0:
+        raise stage_failure(STAGE_PRE_DEPLOY, PRE_DEPLOY_HINT, code, detail)
+
+    say("pre-deploy command finished")
+
+
 def package_folders(project_dir):
     try:
         with os.scandir(project_dir) as entries:
@@ -2353,6 +2431,9 @@ def launch(mode, context):
 
     if mode == "install":
         raise LaunchExit(0)
+
+    if context["request"]["deploying"]:
+        run_pre_deploy(context)
 
     enter_stage(context, STAGE_START)
 

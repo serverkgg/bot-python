@@ -293,8 +293,8 @@ guides:
       ar: كيف نثبّت مشروع بايثون ونشغّله
       en: How we install and start a Python project
     summary:
-      ar: requirements.txt و uv و Poetry و PDM و Pipfile، وإصدار بايثون، وترتيب أمر التشغيل حتى python -m.
-      en: requirements.txt, uv, Poetry, PDM and Pipfile, the Python version, and the start order down to python -m.
+      ar: requirements.txt و uv و Poetry و PDM و Pipfile، وإصدار بايثون، وترتيب أمر التشغيل حتى python -m، وأمر ما قبل النشر.
+      en: requirements.txt, uv, Poetry, PDM and Pipfile, the Python version, the start order down to python -m, and the pre-deploy command.
     tags:
       - deploy
     surfaces:

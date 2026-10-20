@@ -176,13 +176,22 @@ class ShellCommandTest(unittest.TestCase):
 class ServerkJsonTest(unittest.TestCase):
     def test_reads_start_and_install_and_ignores_a_file_it_cannot_trust(self):
         self.assertEqual(
-            launcher.serverk_json_of(json.dumps({"start": " python -m bot ", "install": "pip install ."})),
-            {"start": "python -m bot", "install": "pip install ."},
+            launcher.serverk_json_of(
+                json.dumps({"start": " python -m bot ", "install": "pip install .", "preDeploy": " alembic upgrade head "})
+            ),
+            {"start": "python -m bot", "install": "pip install .", "preDeploy": "alembic upgrade head"},
         )
-        self.assertEqual(launcher.serverk_json_of("{}"), {"start": None, "install": None})
+        self.assertEqual(launcher.serverk_json_of("{}"), {"start": None, "install": None, "preDeploy": None})
 
         for raw in ('{"runtime": "go"}', '{"start": "a\\nb"}', '{"start": NaN}', "[]", "not json", None):
             self.assertIsNone(launcher.serverk_json_of(raw), raw)
+
+    def test_refuses_the_whole_file_over_a_broken_pre_deploy_or_build_command(self):
+        for field in ("preDeploy", "build"):
+            for value in ("", "   ", "a\nb", ["alembic", "upgrade", "head"], True, "x" * 1025):
+                self.assertIsNone(
+                    launcher.serverk_json_of(json.dumps({"start": "python bot.py", field: value})), (field, value)
+                )
 
     def test_starts_from_the_file_after_the_typed_command_and_before_the_entry_files(self):
         declared = launcher.serverk_json_of(json.dumps({"start": "python -m bot"}))
@@ -780,11 +789,27 @@ class TableTest(unittest.TestCase):
         return json.dumps({**launcher.BUILT_IN_TABLE, "python": {**launcher.BUILT_IN_TABLE["python"], **changes}})
 
     def test_reads_a_table_and_refuses_a_broken_one(self):
-        self.assertEqual(launcher.BUILT_IN_TABLE["version"], 2)
+        self.assertEqual(launcher.BUILT_IN_TABLE["version"], 3)
         self.assertEqual(launcher.table_of(json.dumps(launcher.BUILT_IN_TABLE)), launcher.BUILT_IN_TABLE)
         self.assertIsNone(launcher.table_of("{}"))
-        self.assertIsNone(launcher.table_of(json.dumps({**launcher.BUILT_IN_TABLE, "version": 1})))
-        self.assertIsNone(launcher.table_of(json.dumps({**launcher.BUILT_IN_TABLE, "version": 3})))
+        self.assertIsNone(launcher.table_of(json.dumps({**launcher.BUILT_IN_TABLE, "version": 2})))
+        self.assertIsNone(launcher.table_of(json.dumps({**launcher.BUILT_IN_TABLE, "version": 4})))
+
+    def test_refuses_pre_deploy_rules_it_cannot_run(self):
+        python = {key: value for key, value in launcher.BUILT_IN_TABLE["python"].items() if key != "preDeployCommands"}
+
+        self.assertIsNone(launcher.table_of(json.dumps({**launcher.BUILT_IN_TABLE, "python": python})))
+
+        for broken in (
+            None,
+            "alembic upgrade head",
+            [{"file": "alembic.ini"}],
+            [{"file": "", "command": "alembic upgrade head"}],
+            [{"file": "alembic.ini", "command": ["alembic", "upgrade", "head"]}],
+        ):
+            self.assertIsNone(launcher.table_of(self.python_table(preDeployCommands=broken)), broken)
+
+        self.assertEqual(launcher.table_of(self.python_table(preDeployCommands=[]))["python"]["preDeployCommands"], [])
 
     def test_refuses_a_version_one_python_table(self):
         version_one = {
@@ -1374,6 +1399,98 @@ class EnterStageTest(unittest.TestCase):
         self.assertEqual(self.enter(None, launcher.STAGE_SNAPSHOT), (launcher.STAGE_SNAPSHOT, ""))
 
 
+class PreDeployTest(unittest.TestCase):
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="bot-python-pre-deploy-")
+        self.project = os.path.join(self.root, "app")
+        os.makedirs(os.path.join(self.project, ".venv", "bin"))
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def write(self, name, content="", mode=0o644):
+        path = os.path.join(self.project, name)
+
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(content)
+
+        os.chmod(path, mode)
+
+    def context(self, **env):
+        return {
+            "project_dir": self.project,
+            "app_dir": self.project,
+            "state_dir": os.path.join(self.project, ".serverk"),
+            "env": {"PATH": "/usr/bin:/bin", **env},
+            "table": launcher.BUILT_IN_TABLE,
+            "synced": {"source": launcher.SOURCE_LOCAL, "commit": None},
+            "request": {"deployment": "dep_1", "deploying": True},
+            "stage": launcher.STAGE_INSTALL,
+        }
+
+    def run_pre_deploy(self, context):
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            launcher.run_pre_deploy(context)
+
+        return output.getvalue().splitlines()
+
+    def test_detects_alembic_before_django_and_nothing_without_either(self):
+        self.assertIsNone(launcher.resolve_pre_deploy(self.context()))
+
+        self.write("manage.py")
+        self.assertEqual(launcher.resolve_pre_deploy(self.context()), "python manage.py migrate --noinput")
+
+        self.write("alembic.ini")
+        self.assertEqual(launcher.resolve_pre_deploy(self.context()), "alembic upgrade head")
+
+    def test_takes_the_typed_command_over_serverk_json_and_the_file_over_detection(self):
+        self.write("alembic.ini")
+        self.write("serverk.json", json.dumps({"preDeploy": "python -m migrate"}))
+
+        self.assertEqual(launcher.resolve_pre_deploy(self.context()), "python -m migrate")
+        self.assertEqual(
+            launcher.resolve_pre_deploy(self.context(SERVERK_PRE_DEPLOY_COMMAND=" python seed.py ")), "python seed.py"
+        )
+        self.assertEqual(
+            launcher.resolve_pre_deploy(self.context(SERVERK_PRE_DEPLOY_COMMAND="  ")), "python -m migrate"
+        )
+
+    def test_enters_no_stage_without_a_command(self):
+        context = self.context()
+
+        self.assertEqual(self.run_pre_deploy(context), [])
+        self.assertEqual(context["stage"], launcher.STAGE_INSTALL)
+
+    def test_runs_in_the_project_with_the_bots_variables_and_the_venv_first_on_the_path(self):
+        self.write(".venv/bin/alembic", "#!/bin/sh\necho alembic $* in $(pwd) for $DATABASE_URL token=$SERVERK_GIT_TOKEN\n", 0o755)
+        self.write("alembic.ini")
+
+        lines = self.run_pre_deploy(self.context(DATABASE_URL="postgres://db", SERVERK_GIT_TOKEN="ghs_secret"))
+
+        self.assertEqual(
+            lines,
+            [
+                "serverk: deployment dep_1 stage pre-deploy",
+                "serverk: running the pre-deploy command: alembic upgrade head",
+                f"alembic upgrade head in {self.project} for postgres://db token=",
+                "serverk: pre-deploy command finished",
+            ],
+        )
+
+    def test_fails_the_pre_deploy_stage_with_the_commands_reason(self):
+        context = self.context(SERVERK_PRE_DEPLOY_COMMAND="echo relation users already exists; exit 1")
+
+        with self.assertRaises(launcher.LaunchFailure) as raised, contextlib.redirect_stdout(io.StringIO()):
+            launcher.run_pre_deploy(context)
+
+        self.assertEqual(raised.exception.stage, "pre-deploy")
+        self.assertEqual(raised.exception.arabic, launcher.PRE_DEPLOY_HINT)
+        self.assertEqual(raised.exception.detail, "relation users already exists")
+        self.assertEqual(raised.exception.english, "pre-deploy failed: relation users already exists")
+
+
 class StartRetryTest(unittest.TestCase):
     FAILED = {"deployment": "dep_1", "source": "git", "commit": SHA, "outcome": "failed", "stage": "start"}
 
@@ -1398,7 +1515,15 @@ class StageFailureTest(unittest.TestCase):
 
         self.assertEqual(failure.stage, launcher.STAGE_INSTALL)
         self.assertEqual(failure.detail, "out-of-memory")
-        self.assertEqual(failure.arabic, launcher.MEMORY_HINT)
+        self.assertEqual(failure.arabic, launcher.INSTALL_MEMORY_HINT)
+
+    def test_names_a_pre_deploy_command_the_memory_limit_killed_out_of_memory(self):
+        failure = launcher.stage_failure(launcher.STAGE_PRE_DEPLOY, launcher.PRE_DEPLOY_HINT, -9, "Running upgrade")
+
+        self.assertEqual(failure.stage, "pre-deploy")
+        self.assertEqual(failure.detail, "out-of-memory")
+        self.assertEqual(failure.arabic, launcher.PRE_DEPLOY_MEMORY_HINT)
+        self.assertEqual(failure.english, "pre-deploy failed: it ran out of memory and was stopped")
 
     def test_keeps_the_reason_of_an_install_that_exited_137_on_its_own(self):
         failure = launcher.stage_failure(launcher.STAGE_INSTALL, launcher.INSTALL_HINT, 137, "Killed")

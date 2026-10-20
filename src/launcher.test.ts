@@ -381,6 +381,34 @@ const SERVERK_JSON_SAMPLES = [
 		],
 	}),
 	JSON.stringify({
+		start: "python bot.py",
+		preDeploy: " alembic upgrade head ",
+	}),
+	JSON.stringify({
+		start: "python bot.py",
+		preDeploy: "",
+	}),
+	JSON.stringify({
+		start: "python bot.py",
+		preDeploy: "a\nb",
+	}),
+	JSON.stringify({
+		start: "python bot.py",
+		preDeploy: [
+			"alembic",
+			"upgrade",
+			"head",
+		],
+	}),
+	JSON.stringify({
+		start: "python bot.py",
+		preDeploy: "x".repeat(1025),
+	}),
+	JSON.stringify({
+		start: "python bot.py",
+		build: true,
+	}),
+	JSON.stringify({
 		start: "x".repeat(1024),
 	}),
 	JSON.stringify({
@@ -452,6 +480,7 @@ describe("reading serverk.json", () => {
 					? {
 							start: parsed.start,
 							install: parsed.install,
+							preDeploy: parsed.preDeploy,
 						}
 					: null;
 			}),
@@ -929,6 +958,171 @@ describe("running the launcher", () => {
 			outcome: "failed",
 			stage: "snapshot",
 		});
+	});
+
+	const fakeAlembic = () => {
+		writeFileSync(
+			join(app, ".venv", "bin", "alembic"),
+			'#!/bin/sh\necho "alembic $* for $DATABASE_URL token=$SERVERK_GIT_TOKEN ci=$CI"\n',
+			{
+				mode: 0o755,
+			},
+		);
+		writeFileSync(join(app, "alembic.ini"), "[alembic]\n");
+	};
+
+	const preDeployHint = () => {
+		return python("import json, launcher\nprint(json.dumps(launcher.PRE_DEPLOY_HINT))") as string;
+	};
+
+	it("runs the pre-deploy command once per deployment, after the install and before the start, with the bot's variables and the venv on the path", () => {
+		fakeAlembic();
+
+		const deployment = {
+			SERVERK_DEPLOYMENT_ID: "dep_1",
+			SERVERK_GIT_TOKEN: "ghs_secret",
+			DATABASE_URL: "postgres://db",
+		};
+		const deployed = launch(deployment);
+
+		expect(deployed.code).toBe(0);
+		expect(stagesOf(deployed.lines)).toEqual([
+			deploymentStageLine("dep_1", BotDeploymentStage.Sync),
+			deploymentStageLine("dep_1", BotDeploymentStage.Install),
+			deploymentStageLine("dep_1", BotDeploymentStage.PreDeploy),
+			deploymentStageLine("dep_1", BotDeploymentStage.Start),
+		]);
+
+		const ran = deployed.lines.indexOf("serverk: running the pre-deploy command: alembic upgrade head");
+
+		expect(ran).toBeGreaterThan(deployed.lines.indexOf(deploymentStageLine("dep_1", BotDeploymentStage.PreDeploy)));
+		expect(deployed.lines.slice(ran + 1, ran + 3)).toEqual([
+			"alembic upgrade head for postgres://db token= ci=",
+			"serverk: pre-deploy command finished",
+		]);
+		expect(ran).toBeLessThan(deployed.lines.indexOf(deploymentStageLine("dep_1", BotDeploymentStage.Start)));
+		expect(deployed.lines.at(-1)).toBe("the bot ran");
+
+		const restart = launch(deployment);
+
+		expect(restart.code).toBe(0);
+		expect(restart.lines.filter((line) => line.includes("pre-deploy") || line.startsWith("alembic"))).toEqual([]);
+
+		const installMode = launch(
+			{
+				...deployment,
+				SERVERK_DEPLOYMENT_ID: "dep_2",
+			},
+			[
+				"install",
+			],
+		);
+
+		expect(installMode.code).toBe(0);
+		expect(installMode.lines.filter((line) => line.includes("pre-deploy") || line.startsWith("alembic"))).toEqual([]);
+	});
+
+	it("prints no pre-deploy stage for a deployment with no pre-deploy command", () => {
+		const deployed = launch({
+			SERVERK_DEPLOYMENT_ID: "dep_1",
+		});
+
+		expect(deployed.code).toBe(0);
+		expect(stagesOf(deployed.lines)).toEqual([
+			deploymentStageLine("dep_1", BotDeploymentStage.Sync),
+			deploymentStageLine("dep_1", BotDeploymentStage.Install),
+			deploymentStageLine("dep_1", BotDeploymentStage.Start),
+		]);
+		expect(deployed.lines.filter((line) => line.includes("pre-deploy"))).toEqual([]);
+	});
+
+	it("fails a deployment at the pre-deploy stage and runs the command again on its next start", () => {
+		const failed = launch({
+			SERVERK_DEPLOYMENT_ID: "dep_1",
+			SERVERK_PRE_DEPLOY_COMMAND: "echo relation users already exists; exit 1",
+		});
+
+		expect(failed.code).toBe(1);
+		expect(failed.lines).not.toContain("serverk: bot process starting");
+		expect(failed.lines.slice(-3)).toEqual([
+			`serverk: ${preDeployHint()}`,
+			"serverk: pre-deploy failed: relation users already exists",
+			"serverk: deployment dep_1 failed: pre-deploy: relation users already exists",
+		]);
+		expect(stamp()).toMatchObject({
+			deployment: "dep_1",
+			outcome: "failed",
+			stage: BotDeploymentStage.PreDeploy,
+			detail: "relation users already exists",
+		});
+
+		const again = launch({
+			SERVERK_DEPLOYMENT_ID: "dep_1",
+			SERVERK_PRE_DEPLOY_COMMAND: "echo migrated",
+		});
+
+		expect(again.code).toBe(0);
+		expect(again.lines).toContain("serverk: running the pre-deploy command: echo migrated");
+		expect(again.lines).toContain("migrated");
+		expect(stamp()).toMatchObject({
+			deployment: "dep_1",
+			outcome: "ready",
+		});
+	});
+
+	it("fails a deployment whose pre-deploy command the memory limit killed with out-of-memory", () => {
+		const { code, lines } = launch({
+			SERVERK_DEPLOYMENT_ID: "dep_oom",
+			SERVERK_PRE_DEPLOY_COMMAND: "echo Running upgrade; kill -9 $$",
+		});
+
+		expect(code).toBe(1);
+		expect(lines.at(-1)).toBe("serverk: deployment dep_oom failed: pre-deploy: out-of-memory");
+		expect(stamp()).toMatchObject({
+			stage: BotDeploymentStage.PreDeploy,
+			detail: BridgeCrashCause.OutOfMemory,
+		});
+	});
+
+	it("takes the pre-deploy command from the settings, then serverk.json, then alembic.ini before manage.py", () => {
+		writeFileSync(join(app, "manage.py"), "import sys\nprint('manage', *sys.argv[1:], flush=True)\n");
+
+		const django = launch({
+			SERVERK_DEPLOYMENT_ID: "dep_1",
+		});
+
+		expect(django.lines).toContain("serverk: running the pre-deploy command: python manage.py migrate --noinput");
+		expect(django.lines).toContain("manage migrate --noinput");
+
+		fakeAlembic();
+
+		expect(
+			launch({
+				SERVERK_DEPLOYMENT_ID: "dep_2",
+			}).lines,
+		).toContain("serverk: running the pre-deploy command: alembic upgrade head");
+
+		writeFileSync(
+			join(app, "serverk.json"),
+			JSON.stringify({
+				preDeploy: "echo declared migration",
+			}),
+		);
+
+		const declared = launch({
+			SERVERK_DEPLOYMENT_ID: "dep_3",
+		});
+
+		expect(declared.lines).toContain("serverk: running the pre-deploy command: echo declared migration");
+		expect(declared.lines).toContain("declared migration");
+
+		const typed = launch({
+			SERVERK_DEPLOYMENT_ID: "dep_4",
+			SERVERK_PRE_DEPLOY_COMMAND: "echo typed migration",
+		});
+
+		expect(typed.lines).toContain("serverk: running the pre-deploy command: echo typed migration");
+		expect(typed.lines.filter((line) => line.includes("declared migration"))).toEqual([]);
 	});
 
 	it("runs the customer's install command inside the venv and reinstalls when it changes", () => {

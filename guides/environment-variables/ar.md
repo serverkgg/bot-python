@@ -8,6 +8,8 @@ bot.run(os.environ["DISCORD_TOKEN"])
 
 فأضف متغيرًا اسمه `DISCORD_TOKEN`. وإذا كان يقرأ `os.getenv("TOKEN")`، فسمّه `TOKEN`. وعند إنشاء بوتك نعرض لك الأسماء التي وجدناها في كودك وفي `.env.example`، لتعرف ما يلزم إضافته.
 
+وتصل المتغيرات أيضًا إلى أمر ما قبل النشر، فيقرأ منها مثلًا `DATABASE_URL` لتحديث جداول قاعدة البيانات.
+
 ## القيم الحساسة تُحفظ مشفّرة
 
 فعّل **حساس** لأي قيمة سرية مثل التوكن أو كلمات المرور. تُحفظ القيمة الحساسة مشفّرة ولا تُعرض بعد حفظها، ولتغييرها اكتب قيمة جديدة. وحتى إذا طبعها بوتك بالخطأ، نخفيها من الكونسول ونعرض مكانها `••••`.
@@ -29,7 +31,7 @@ bot.run(os.environ["DISCORD_TOKEN"])
 بعض الأسماء خاصة بمنصة سيرفرك، فلا يمكن إضافتها كمتغيرات:
 
 - أي اسم يبدأ بـ `SERVERK_`.
-- الأسماء التي تحمل إعدادات النشر: `REPO_URL` و `REPO_REF` و `REPO_BRANCH` و `START_COMMAND` و `INSTALL_COMMAND` و `ROOT_DIRECTORY` و `DEPLOYMENT_ID` و `SNAPSHOT_ID` و `BOT_PLATFORM` و `GIT_TOKEN`. غيّرها من إعدادات بوتك بدلًا من ذلك.
+- الأسماء التي تحمل إعدادات النشر: `REPO_URL` و `REPO_REF` و `REPO_BRANCH` و `START_COMMAND` و `INSTALL_COMMAND` و `PRE_DEPLOY_COMMAND` و `ROOT_DIRECTORY` و `DEPLOYMENT_ID` و `SNAPSHOT_ID` و `BOT_PLATFORM` و `GIT_TOKEN`. غيّرها من إعدادات بوتك بدلًا من ذلك.
 - `BOT_WEB` و `BOT_PORT_1` و `BOT_PORT_2`، وهي مفاتيح عنوان الويب والمنفذين. فعّلها من **الإدارة** بدلًا من ذلك.
 - `PATH` و `HOME` و `TZ` و `VIRTUAL_ENV` و `PYTHONUNBUFFERED`، لأن بوتك يحتاجها ليشتغل.
 

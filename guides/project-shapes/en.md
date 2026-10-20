@@ -34,6 +34,21 @@ The first match wins:
 
 A file starts as `.venv/bin/python -u main.py`. A command you write in the settings, in `serverk.json` or in a `Procfile` runs with `.venv/bin` first on the path, so `python` there is your bot's own Python.
 
+## The pre-deploy command
+
+The pre-deploy command is for a task such as a database migration. We run it once per deployment, after the install and before your bot starts. The first match wins:
+
+1. The pre-deploy command in your bot's settings.
+2. The `preDeploy` field in `serverk.json`.
+3. `alembic.ini`: `alembic upgrade head`.
+4. `manage.py`: `python manage.py migrate --noinput`.
+
+Without any of them, nothing runs. To replace the command we find, write your own in the settings or in `serverk.json`.
+
+The command runs in your bot's code folder with your bot's variables, and with `.venv/bin` first on the path, so `alembic` and `python` there come from your bot's own environment. The console shows `running the pre-deploy command: alembic upgrade head`.
+
+A restart doesn't run it, only a deployment does. When it fails, the deployment stops at the `pre-deploy` step before your bot starts, and we run it again on the next start until the deployment completes. So make it a command that is safe to run twice, as the migration commands above are.
+
 ## What the runtime has
 
 `ffmpeg`, `libopus` and `libsodium` for voice bots, and the build tools for libraries that build during the install. Everything your bot prints reaches the console at once, because `PYTHONUNBUFFERED=1` is set.

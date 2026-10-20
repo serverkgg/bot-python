@@ -6,6 +6,7 @@ This repository is a Telegram bot in Python with python-telegram-bot, deployed o
 
 - Install: `uv pip install -r requirements.txt`. Start: `python main.py`. Python 3.12, since no `.python-version` asks for another.
 - `serverk.json` declares the runtime, platform, framework and variables. One invalid field rejects the whole file.
+- A database migration goes in the `preDeploy` field of `serverk.json`, one line such as `alembic upgrade head`. Without it, an `alembic.ini` runs `alembic upgrade head` and a `manage.py` runs `python manage.py migrate --noinput`. It runs once per deployment, after the install and before the start, with the bot's variables and `.venv/bin` first on the path, never on a plain restart. Its failure fails the deployment at the `pre-deploy` stage, and the next start runs it again, so it must be safe to run twice.
 - Keep the `Logged in as` line: Serverk marks the bot ready when it prints it, or after 20 seconds alive.
 - The bot long-polls. For webhook mode, turn on the web address in the bot's Manage page: the bot then gets `PORT`, `SERVERK_WEB_URL` and `SERVERK_WEB_HOST`, and must listen on `0.0.0.0` and `PORT`. One token runs one bot: a second copy polling the same token gets `409 Conflict`.
 
