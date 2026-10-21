@@ -1,47 +1,68 @@
+![Python bot](assets/banner.webp)
+
 # بوت بايثون (Python bot)
 
-حزمة بوتات بايثون على منصة سيرفرك (`serverk.gg`). هذا المستودع فيه كل شيء يحتاجه بوت ديسكورد أو تيليجرام مكتوب بلغة بايثون عشان يشتغل على المنصة: ملف التعريف `serverk.yml`، الـ driver اللي يدير البوت، صورة الدوكر مع الـ launcher، القوالب الجاهزة، والشروحات.
+يضم هذا الريبو بيئة تشغيل بوت بايثون، وهي كل ما تحتاجه منصة سيرفرك لتشغيل بوتك. اربط ريبو GitHub أو ارفع كود بوتك، ونتعرف على طريقة تشغيله تلقائيًا. أضف متغيراتك، وانشر بضغطة واحدة، ونثبّت المكتبات من requirements.txt في بيئة خاصة ببوتك، وتابع كل ما يطبعه لحظة بلحظة. أي بوت بـ Python، مع requirements.txt أو uv أو Poetry أو Pipfile، يُنشر من GitHub أو ملف zip. صفحة البوتات: [serverk.gg/bots](https://serverk.gg/bots)
 
-The Python bot package for the Serverk platform (`serverk.gg`). This repo holds everything a Discord or Telegram bot written in Python needs to run on the platform: the `serverk.yml` manifest, the driver that manages the bot, the Docker image with its launcher, the starter templates, and the guides.
+This repository holds the Python bot runtime: everything Serverk needs to run your bot. Link a GitHub repository or upload your bot's code, and we work out how to run it. Add your variables, deploy in one click, and we install the dependencies from requirements.txt into an environment of its own while you follow everything it prints, live. Any Python bot, with requirements.txt, uv, Poetry or Pipfile, deployed from GitHub or a zip. Bots page: [serverk.gg/bots](https://serverk.gg/bots)
 
 ## Layout
 
-- `serverk.yml` — the bot manifest: metadata, resources, no ports, the environment vault, backup rules, file notes, guides.
-- `src/` — the bridge driver: install (the launcher's `install` mode), lifecycle and its layered process environment (tool defaults, then the customer's vault, then the launcher's internals), the passive identity card, the deploy module the platform invokes, query, terminal rules and the deployment event.
-- `image/Dockerfile` — the runtime image; the compiled bridge binary is its entrypoint.
-- `image/launcher.py` — what the bridge starts: it takes the deploy marker, puts the code in place (a pinned Git commit, an uploaded snapshot committed into `.serverk/history`, or the files already there), installs the dependencies into the bot's own `.venv` by hash, runs the pre-deploy command once per deployment, prints `serverk: deployment <id> ready` or `serverk: deployment <id> failed: <stage>: <detail>`, then `serverk: bot process starting`, and replaces itself with the bot's own start command.
-- `image/detect.json` — the start and install table the launcher reads, rendered by `serverk-bridge detect-table` from the same kit the platform inspects code with.
-- `image/test_launcher.py` — the launcher's unit tests, run with `python3 -m unittest` and from `bun run test`.
-- `image/git-askpass` — hands Git the installation token from the environment, so it never lands on a command line or in a log.
-- `templates/` — starter bots (discord.py and python-telegram-bot), each with a fully pinned `requirements.txt`, synced to the public `serverkgg/bot-template-*` repositories by `outdo templates`.
-- `assets/` — logo and banner (webp).
-- `guides/` — customer guides in Arabic and English.
+- `serverk.yml`: the bot manifest with its metadata, resources, environment vault, backup rules and the guide list.
+- `serverk.schema.json`: the JSON Schema of `serverk.yml` for the editor, written by `serverk-bridge schema`.
+- `src/`: the driver, built on `@serverkgg/bridge`; `src/driver.ts` exports it and `src/main.ts` serves it.
+- `image/Dockerfile`: the container image, with the compiled bridge as its entrypoint.
+- `image/launcher.py`: what the bridge starts; it puts the deployed code in place, installs its dependencies and starts the bot.
+- `image/detect.json`: the start and install table the launcher reads, written by `serverk-bridge detect-table`.
+- `templates/`: starter bots, synced to the public `serverkgg/bot-template-*` repositories by `bunx outdo templates`.
+- `assets/`: the logo and the banner the site and the panel show.
+- `guides/<id>/ar.md` and `en.md`: the guide bodies; each guide's title, summary and tags live in `serverk.yml`.
+
+## Guides
+
+- [شغّل بوتك أول مرة · Run your bot for the first time](https://serverk.gg/bots/bot-python/guides/getting-started)
+- [أضف التوكن والمتغيرات · Add the token and your variables](https://serverk.gg/bots/bot-python/guides/environment-variables)
+- [انقل بوتك من استضافة أخرى · Move your bot in from another host](https://serverk.gg/bots/bot-python/guides/moving-in)
+- [اربط بوتك بريبو GitHub · Link your bot to a GitHub repository](https://serverk.gg/bots/bot-python/guides/connect-github)
+- [أضف زر النشر إلى ريبو بوتك · Add a deploy button to your repository](https://serverk.gg/bots/bot-python/guides/deploy-button)
+- [النشرات والرجوع إلى إصدار سابق · Deployments and rolling back](https://serverk.gg/bots/bot-python/guides/deployments)
+- [ارفع كود بوتك دون ريبو · Upload your bot's code without a repository](https://serverk.gg/bots/bot-python/guides/upload-zip)
+- [قواعد رفع الكود · Upload rules](https://serverk.gg/bots/bot-python/guides/upload-rules)
+- [كيف نثبّت مشروع بايثون ونشغّله · How we install and start a Python project](https://serverk.gg/bots/bot-python/guides/project-shapes)
+- [بيانات بوتك والنسخ الاحتياطية · Your bot's data and backups](https://serverk.gg/bots/bot-python/guides/data-and-backups)
+- [عنوان الويب والمنافذ لبوتك · Your bot's web address and ports](https://serverk.gg/bots/bot-python/guides/web-address)
+- [توكن بوت ديسكورد والـ Intents والصلاحيات · Your Discord bot's token, intents and permissions](https://serverk.gg/bots/bot-python/guides/discord-token)
+- [أين تجد توكن بوت تيليقرام · Where to find your Telegram bot token](https://serverk.gg/bots/bot-python/guides/telegram-token)
+- [اقرأ الكونسول وافهم ما حدث · Read the console and work out what happened](https://serverk.gg/bots/bot-python/guides/read-the-logs)
+- [أخطاء بوتك وحلولها · Your bot's errors and how to fix them](https://serverk.gg/bots/bot-python/guides/errors)
 
 ## Develop
 
-Everything runs on [Bun](https://bun.sh):
+Everything runs on [Bun](https://bun.sh).
 
-```sh
-bun install
-bun run check
-bun run tsc
-bun run test
-bun run validate
-bun run compile
-```
+- `bun install`: installs the dependencies, points Git at the hooks in `.githooks/` and writes `.claude/rules/package.md` from the bridge.
+- `bun run check`: checks lint and formatting with Biome; `bun run fix` applies the fixes.
+- `bun run tsc`: type-checks the code.
+- `bun run test`: runs the tests.
+- `bun run validate`: runs the checks the platform runs at publish, and fails while this README is out of date.
+- `bun run compile`: builds `dist/bridge`, the linux/amd64 binary the image starts.
 
-`validate` checks the manifest, assets, driver wiring and the detection table with the exact validation the platform runs at publish. `compile` produces `dist/bridge`, an amd64 binary — serverk publishes package images for `linux/amd64` only. The launcher is tested with `python3 -m unittest` against `templates/`, and `bun run test` runs those tests, checks its tables and patterns against the bridge's, and drives its snapshot deployments end to end with `python3` and `git`.
+`.githooks/pre-commit` runs `bun run fix`, `bun run tsc`, `bun run test`, `bun run validate`, `bunx serverk-bridge schema --check` and `bunx serverk-bridge detect-table --check` before every commit. There is no CI: a commit that passes the hook is ready.
 
-The `pre-commit` hook is the gate: it runs `fix`, `tsc`, `test`, `validate`, `serverk-bridge schema --check` and `serverk-bridge detect-table --check`, and restages whatever the formatter touched. There is no CI workflow — a commit that passes the hook is a commit that is ready.
-
-The driver is built on [`@serverkgg/bridge`](https://www.npmjs.com/package/@serverkgg/bridge) and its `@serverkgg/bridge/bot` helpers. `bun install` runs `serverk-bridge link`, which points `node_modules/@serverkgg/bridge` at `../serverk/modules/bridge` when that checkout exists — never commit a `file:` dependency.
+`bun install` runs `serverk-bridge link`, which links `@serverkgg/bridge` to a sibling `serverk` checkout at `../serverk/modules/bridge` when one exists. Never commit a `file:` or `link:` dependency.
 
 ## Contribute
 
-- افتح issue لأي مشكلة أو اقتراح — بالعربي أو بالإنجليزي، كلها مرحّب فيها.
-- Run `bun install` once so the `pre-commit` hook is wired, then let it gate every commit — lint, types, tests, package validation, and the schema check all run locally, with no secrets and nothing to configure.
-- Releases are done by the Serverk team through the platform's central release pipeline; merged changes ride the next release.
+افتح issue لأي مشكلة أو اقتراح، بالعربية أو بالإنجليزية. ينشر فريق سيرفرك هذا الريبو من ريبو `serverk` بالأمر `bunx outdo package --prod --name bot-python`، ويصل كل تغيير مدموج مع النشر التالي. العربية هي لغة المصدر: يُكتب كل نص يقرؤه العميل بالعربية أولًا، بلغة رسمية مع لمسة خليجية خفيفة، ثم بالإنجليزية. أبقِ أسماء الملفات والأوامر والمفاتيح بالحروف اللاتينية.
 
-## Arabic copy
+Open an issue for any problem or suggestion, in Arabic or English. Serverk releases this repository from `serverk` with `bunx outdo package --prod --name bot-python`; merged changes ride the next release. Arabic is the source language: every string a customer reads is written in Arabic first, formal with a light Gulf touch, then in English. Keep file names, commands and config keys in Latin script.
 
-Arabic is the source language of the platform. Customer-facing strings in `serverk.yml`, the launcher's hints and the guides use Gulf Arabic — the package's name is «بوت بايثون» ("Python bot" in English): it names the product a customer buys, so nothing adds «بوت» in front of it, and «بايثون» alone only ever names the runtime.
+## License
+
+الكود متاح للقراءة، وجميع الحقوق محفوظة لمنصة سيرفرك، ولا يُمنح أي ترخيص.
+
+The code is public to read. All rights are reserved by Serverk, and no license is granted.
+
+يُنشأ هذا الملف بالأمر `serverk-bridge readme` من `serverk.yml`، فعدّل ملف التعريف لا هذا الملف.
+
+Generated by `serverk-bridge readme` from `serverk.yml`; edit the manifest, not this file.
