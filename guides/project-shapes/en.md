@@ -49,6 +49,20 @@ The command runs in your bot's code folder with your bot's variables, and with `
 
 A restart doesn't run it, only a deployment does. When it fails, the deployment stops at the `pre-deploy` step before your bot starts, and we run it again on the next start until the deployment completes. So make it a command that is safe to run twice, as the migration commands above are.
 
+## A command you run from the console
+
+The pre-deploy command runs on every deployment, so keep your migrations there. For a task you run once by hand, type its command in the console instead, such as:
+
+- `python manage.py createsuperuser --noinput` to create a Django superuser. With `--noinput`, Django reads the account from `DJANGO_SUPERUSER_USERNAME`, `DJANGO_SUPERUSER_EMAIL` and `DJANGO_SUPERUSER_PASSWORD`, so add them to your variables, mark the password **Sensitive**, and redeploy before you run the command.
+- `python -m scripts.seed` to run one of your own scripts once, here `scripts/seed.py`.
+- `pip list` to see which libraries your bot's environment has, and their versions.
+
+We run it the way we run your bot: in your bot's code folder, as the same user your bot runs as, with your bot's variables and `.venv/bin` first on the path, so `python` and `pip` there come from your bot's own environment. It works even while your bot is stopped or has crashed. Its output prints in the console, then `serverk: command finished`, or `serverk: command failed (exit 1)`, where the number is the command's exit code. The next deployment puts back every file your code carries, so a lasting change, such as a new library in `requirements.txt`, belongs in your code.
+
+One command runs at a time, for 10 minutes at most, and its output stops at 256 KiB. A command can't read input, so one that asks a question ends at once: add its flag that skips the questions, such as `--noinput`. Before your bot's first deployment, the console answers `serverk: deploy the bot first`.
+
+@[open](console)
+
 ## What the runtime has
 
 `ffmpeg`, `libopus` and `libsodium` for voice bots, and the build tools for libraries that build during the install. Everything your bot prints reaches the console at once, because `PYTHONUNBUFFERED=1` is set.

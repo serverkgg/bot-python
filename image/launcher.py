@@ -53,6 +53,7 @@ LAUNCHER_KEYS = (
     "SERVERK_START_COMMAND",
     "SERVERK_INSTALL_COMMAND",
     "SERVERK_PRE_DEPLOY_COMMAND",
+    "SERVERK_RUN_COMMAND",
     "SERVERK_ROOT_DIRECTORY",
     "SERVERK_DEPLOYMENT_ID",
     "SERVERK_SNAPSHOT_ID",
@@ -62,6 +63,12 @@ LAUNCHER_KEYS = (
 )
 
 RESUME_KEY = "SERVERK_LAUNCH_RESUME"
+
+RUN_KEY = "SERVERK_RUN_COMMAND"
+
+RUN_MODE = "run"
+
+RUN_SHELL = "/bin/sh"
 
 WEB_URL_KEY = "SERVERK_WEB_URL"
 
@@ -2460,11 +2467,41 @@ def launch(mode, context):
     os.execve(executable_of(project_dir, program), [program, *args], exec_env)
 
 
+def run_command(context):
+    env = dict(os.environ)
+    app_dir = os.getcwd()
+
+    context["stage"] = RUN_MODE
+
+    if not occupied_entries(os.listdir(app_dir)):
+        raise LaunchFailure(RUN_MODE, None, "deploy the bot first", "no deployed code", EXIT_CONFIG)
+
+    command = text(env.get(RUN_KEY))
+
+    if command is None:
+        raise LaunchFailure(RUN_MODE, None, f"{RUN_MODE} failed: no command", "no command", EXIT_CONFIG)
+
+    project_dir = resolve_project_dir(app_dir, text(env.get("SERVERK_ROOT_DIRECTORY")), RUN_MODE)
+
+    say(f"running: {redactor(text(env.get('SERVERK_GIT_TOKEN')))(command)}")
+
+    os.chdir(project_dir)
+    os.execve(RUN_SHELL, [RUN_SHELL, "-c", command], venv_environment(bot_environment(env), project_dir))
+
+
+def mode_of(argv):
+    return argv[0] if argv[:1] in (["install"], [RUN_MODE]) else "start"
+
+
 def main(argv):
     context = {"request": None, "stage": STAGE_SYNC, "synced": None}
+    mode = mode_of(argv)
 
     try:
-        launch("install" if argv[:1] == ["install"] else "start", context)
+        if mode == RUN_MODE:
+            run_command(context)
+        else:
+            launch(mode, context)
     except LaunchExit as done:
         sys.exit(done.code)
     except Exception as error:

@@ -7,6 +7,7 @@ import platform
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -1535,6 +1536,149 @@ class StageFailureTest(unittest.TestCase):
 
         self.assertEqual(failure.detail, "No solution found")
         self.assertEqual(failure.english, "install failed: No solution found")
+
+
+class RunCommandTest(unittest.TestCase):
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="bot-python-run-")
+        self.app = os.path.join(self.root, "app")
+        self.state = os.path.join(self.app, launcher.STATE_ENTRY)
+        os.makedirs(self.state)
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def write(self, name, content="", mode=0o644):
+        path = os.path.join(self.app, name)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(content)
+
+        os.chmod(path, mode)
+
+    def listing(self):
+        return sorted(
+            os.path.relpath(os.path.join(folder, name), self.app)
+            for folder, folders, files in os.walk(self.app)
+            for name in folders + files
+        )
+
+    def run_command(self, **env):
+        result = subprocess.run(
+            [sys.executable, "-I", os.path.abspath(launcher.__file__), launcher.RUN_MODE],
+            cwd=self.app,
+            env={"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": self.root, "SERVERK_STATE_DIR": self.state, **env},
+            capture_output=True,
+            text=True,
+        )
+
+        return result.returncode, result.stdout.splitlines(), result.stderr.splitlines()
+
+    def test_runs_the_command_in_the_root_directory_with_the_start_commands_environment_and_the_venv_first_on_the_path(self):
+        self.write("apps/bot/main.py", "run()")
+        self.write(
+            "apps/bot/.venv/bin/seed",
+            '#!/bin/sh\necho "seeded $1 in $(pwd) from $VIRTUAL_ENV with $DISCORD_TOKEN, token [$SERVERK_GIT_TOKEN], '
+            'command [$SERVERK_RUN_COMMAND]"\necho "seed warning" >&2\n',
+            0o755,
+        )
+        project = os.path.realpath(os.path.join(self.app, "apps", "bot"))
+
+        code, lines, errors = self.run_command(
+            SERVERK_ROOT_DIRECTORY="apps/bot",
+            SERVERK_RUN_COMMAND=" seed --all ",
+            SERVERK_GIT_TOKEN="ghs_installation",
+            DISCORD_TOKEN="token",
+        )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            lines,
+            [
+                "serverk: running: seed --all",
+                f"seeded --all in {project} from {os.path.join(project, '.venv')} with token, token [], command []",
+            ],
+        )
+        self.assertEqual(errors, ["seed warning"])
+
+    def test_masks_the_git_token_in_the_line_that_names_the_command_and_leaves_it_out_of_the_commands_environment(self):
+        self.write("main.py", "run()")
+        command = "echo launcher-token-$(tr '\\0' '\\n' < /proc/$$/environ | grep -c '^SERVERK_GIT_TOKEN=')"
+
+        code, lines, _ = self.run_command(
+            SERVERK_GIT_TOKEN="ghs_installation", SERVERK_RUN_COMMAND=f"{command} # ghs_installation"
+        )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(lines, [f"serverk: running: {command} # ***", "launcher-token-0"])
+
+    def test_passes_the_commands_exit_code_through_without_a_failure_line_of_its_own(self):
+        self.write("main.py", "run()")
+
+        for exit_code in (0, 1, 42):
+            code, lines, _ = self.run_command(SERVERK_RUN_COMMAND=f"echo leaving; exit {exit_code}")
+
+            self.assertEqual(code, exit_code)
+            self.assertEqual(lines, [f"serverk: running: echo leaving; exit {exit_code}", "leaving"])
+
+    def test_tells_the_author_to_deploy_first_while_the_bot_folder_holds_no_code(self):
+        os.makedirs(os.path.join(self.app, ".venv", "bin"))
+
+        code, lines, _ = self.run_command(SERVERK_RUN_COMMAND="ls")
+
+        self.assertEqual(code, launcher.EXIT_CONFIG)
+        self.assertEqual(lines, ["serverk: deploy the bot first"])
+
+    def test_refuses_a_missing_or_blank_command_with_the_configuration_code(self):
+        self.write("main.py", "run()")
+
+        for env in ({}, {"SERVERK_RUN_COMMAND": " \t "}):
+            code, lines, _ = self.run_command(**env)
+
+            self.assertEqual(code, launcher.EXIT_CONFIG)
+            self.assertEqual(lines, ["serverk: run failed: no command"])
+
+    def test_refuses_a_root_directory_the_bot_folder_does_not_hold_like_the_start_does(self):
+        self.write("main.py", "run()")
+
+        code, lines, _ = self.run_command(SERVERK_ROOT_DIRECTORY="apps/bot", SERVERK_RUN_COMMAND="ls")
+
+        self.assertEqual(code, launcher.EXIT_CONFIG)
+        self.assertEqual(lines[-1], "serverk: run failed: root directory apps/bot not found")
+
+    def test_never_syncs_installs_or_writes_to_the_state_folder_even_with_a_deployment_waiting(self):
+        bin_dir = os.path.join(self.root, "bin")
+        calls = os.path.join(self.root, "tool-calls")
+        os.makedirs(bin_dir)
+
+        for tool in ("git", "pip", "uv", "python3"):
+            path = os.path.join(bin_dir, tool)
+
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(f'#!/bin/sh\necho "{tool} $*" >> {calls}\nexit 1\n')
+
+            os.chmod(path, 0o755)
+
+        self.write("main.py", "run()")
+        self.write("requirements.txt", "discord.py\n")
+        self.write("alembic.ini")
+        self.write(os.path.join(launcher.STATE_ENTRY, launcher.DEPLOY_MARKER), json.dumps({"deployment": "dep_2"}))
+        before = self.listing()
+
+        code, lines, _ = self.run_command(
+            PATH=f"{bin_dir}:{os.environ.get('PATH', '/usr/bin:/bin')}",
+            SERVERK_REPO_URL=REMOTE,
+            SERVERK_DEPLOYMENT_ID="dep_2",
+            SERVERK_INSTALL_COMMAND="pip install -r requirements.txt",
+            SERVERK_RUN_COMMAND="echo ran",
+        )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(lines, ["serverk: running: echo ran", "ran"])
+        self.assertFalse(os.path.exists(calls))
+        self.assertEqual(self.listing(), before)
+        self.assertEqual(os.listdir(self.state), [launcher.DEPLOY_MARKER])
 
 
 if __name__ == "__main__":
