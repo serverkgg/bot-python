@@ -245,11 +245,11 @@ guides:
       en: guides/deploy-button/en.md
   - id: deployments
     title:
-      ar: النشرات والرجوع إلى إصدار سابق
+      ar: النشرات واسترجاع نشر سابق
       en: Deployments and rolling back
     summary:
-      ar: ما يحدث في كل نشر، وكيف ترجع بوتك إلى آخر إصدار كان شغّالًا.
-      en: What happens in each deployment, and how to take your bot back to the last version that worked.
+      ar: ما يحدث في كل نشر، وكيف ترجّع بوتك إلى آخر نشر كان شغّالًا.
+      en: What happens in each deployment, and how to roll your bot back to the last deployment that worked.
     tags:
       - deploy
     surfaces:

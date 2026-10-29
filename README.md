@@ -25,7 +25,7 @@ This repository holds the Python bot runtime: everything Serverk needs to run yo
 - [انقل بوتك من استضافة أخرى · Move your bot in from another host](https://serverk.gg/bots/bot-python/guides/moving-in)
 - [اربط بوتك بريبو GitHub · Link your bot to a GitHub repository](https://serverk.gg/bots/bot-python/guides/connect-github)
 - [أضف زر النشر إلى ريبو بوتك · Add a deploy button to your repository](https://serverk.gg/bots/bot-python/guides/deploy-button)
-- [النشرات والرجوع إلى إصدار سابق · Deployments and rolling back](https://serverk.gg/bots/bot-python/guides/deployments)
+- [النشرات واسترجاع نشر سابق · Deployments and rolling back](https://serverk.gg/bots/bot-python/guides/deployments)
 - [ارفع كود بوتك دون ريبو · Upload your bot's code without a repository](https://serverk.gg/bots/bot-python/guides/upload-zip)
 - [قواعد رفع الكود · Upload rules](https://serverk.gg/bots/bot-python/guides/upload-rules)
 - [كيف نثبّت مشروع بايثون ونشغّله · How we install and start a Python project](https://serverk.gg/bots/bot-python/guides/project-shapes)
