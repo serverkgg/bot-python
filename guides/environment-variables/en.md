@@ -22,7 +22,7 @@ Have a `.env` file on your computer? Paste the whole file into the variables box
 
 ## After you change a variable
 
-The change reaches your bot with the next deployment. Press **Redeploy** on your bot's page to apply it right away. Variables don't roll back when you roll back to an older deployment; they stay as they are.
+The change reaches your bot the next time you start or restart it, or with its next deployment. If your bot is running, press **Restart now** on its page to apply the change right away. Variables don't roll back when you roll back to an older deployment; they stay as they are.
 
 @[open](overview)
 
